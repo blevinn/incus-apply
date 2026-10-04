@@ -12,7 +12,6 @@ import (
 	"time"
 
 	internalapply "github.com/abiosoft/incus-apply/internal/apply"
-	internalconfig "github.com/abiosoft/incus-apply/internal/config"
 	internalincus "github.com/abiosoft/incus-apply/internal/incus"
 )
 
@@ -31,7 +30,7 @@ type Options struct {
 	Replace         bool
 	ShowEnv         bool
 	Stop            bool
-	Launch          bool
+	NoLaunch        bool
 	FailFast        bool
 	NoWaitCloudInit bool
 	ForceLocal      bool
@@ -77,10 +76,6 @@ func New(options Options) *Client {
 	if options.Operation == "" {
 		options.Operation = Upsert
 	}
-	if !options.Launch {
-		// Match the CLI's default without requiring callers to opt in.
-		options.Launch = true
-	}
 	return &Client{
 		options: options,
 		backend: newCommandBackend,
@@ -118,7 +113,7 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 		Replace:         c.options.Replace,
 		ShowEnv:         c.options.ShowEnv,
 		Stop:            c.options.Stop,
-		Launch:          c.options.Launch,
+		Launch:          !c.options.NoLaunch,
 		FailFast:        c.options.FailFast,
 		NoWaitCloudInit: c.options.NoWaitCloudInit,
 		ForceLocal:      c.options.ForceLocal,
@@ -200,5 +195,3 @@ func copyPreview(output internalapply.Output) Preview {
 	return preview
 }
 
-// Keep internal config reachable to API tests without exposing it publicly.
-var _ = internalconfig.Resource{}
