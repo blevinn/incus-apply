@@ -27,6 +27,15 @@ func loadResources(opts *Options) ([]*config.Resource, error) {
 	parser := config.NewParser(opts.FetchTimeout)
 	var results []*config.FileResult
 
+	if opts.Reader != nil {
+		result, err := parser.ParseStdin(opts.Reader)
+		if err != nil {
+			return nil, err
+		}
+		opts.FileCount++
+		results = append(results, result)
+	}
+
 	var filePaths []string
 	for _, f := range opts.Files {
 		switch {

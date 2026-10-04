@@ -1,9 +1,16 @@
 package apply
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 // Options holds all CLI flags and configuration options.
 type Options struct {
+	// Reader supplies one in-memory configuration stream. When set it is loaded
+	// before file/URL inputs and does not require stdin or a temporary file.
+	Reader io.Reader
+
 	// Input sources (positional arguments: files, directories, URLs, or '-' for stdin)
 	Files     []string
 	Recursive bool

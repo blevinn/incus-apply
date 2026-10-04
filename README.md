@@ -44,6 +44,45 @@ config:
 incus-apply debian.yaml
 ```
 
+## Embeddable Go API
+
+This fork exposes a small library facade at `github.com/abiosoft/incus-apply/apply`.
+
+The module path intentionally remains upstream-compatible. Consumers that want
+the fork can pin it with a Go module replacement while the API work is carried
+upstream:
+
+```go
+require github.com/abiosoft/incus-apply <version>
+
+replace github.com/abiosoft/incus-apply => github.com/blevinn/incus-apply <fork-version>
+```
+
+The API accepts configuration through an `io.Reader` and separates planning
+from mutation:
+
+```go
+client := apply.New(apply.Options{
+    Project: "default",
+})
+
+preview, err := client.Plan(reader)
+if err != nil {
+    // handle planning error
+}
+
+result, err := client.Execute(reader)
+```
+
+`Plan` performs reconciliation discovery and diffing without applying the
+changes. `Execute` performs the selected operation non-interactively and
+returns the same structured preview alongside the execution result.
+
+The current default backend still preserves upstream's command-backed Incus
+behavior. That backend is transitional; callers should depend on the public API,
+not command execution details. A native Incus Go backend is planned as the next
+fork-specific integration step.
+
 ## Documentation
 
 Check the [project website](https://incus-apply.abiosoft.com).
