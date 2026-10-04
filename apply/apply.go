@@ -194,4 +194,3 @@ func copyPreview(output internalapply.Output) Preview {
 	}
 	return preview
 }
-
