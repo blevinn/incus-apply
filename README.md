@@ -1,5 +1,10 @@
 # incus-apply
 
+> [!NOTE]
+> This repository is a fork of [abiosoft/incus-apply](https://github.com/abiosoft/incus-apply).
+>
+> The fork tracks upstream while adding a narrow embeddable API and native Go integration points needed by downstream consumers such as Aginctus. Changes should stay small, well-tested, and suitable for upstreaming whenever possible. For the canonical upstream project, releases, and documentation, see [abiosoft/incus-apply](https://github.com/abiosoft/incus-apply).
+
 [![Go](https://github.com/abiosoft/incus-apply/actions/workflows/go.yml/badge.svg)](https://github.com/abiosoft/incus-apply/actions/workflows/go.yml)
 [![Integration](https://github.com/abiosoft/incus-apply/actions/workflows/integration.yml/badge.svg)](https://github.com/abiosoft/incus-apply/actions/workflows/integration.yml)
 
