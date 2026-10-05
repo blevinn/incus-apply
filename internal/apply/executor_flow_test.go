@@ -469,3 +469,89 @@ func TestExecutorUpsert_DuplicateResourcesSameProjectFails(t *testing.T) {
 		t.Fatalf("renderer outputs = %d, want 0", len(renderer.outputs))
 	}
 }
+
+
+func TestComputeUpsertDiff_ExistingResourceGuardRejectsForeignResource(t *testing.T) {
+	client := newFakeClient()
+	client.exists["network/aginctus-mgmt"] = true
+	client.current["network/aginctus-mgmt"] = "config:\n  user.aginctus.managed: \"false\"\n"
+
+	res := &config.Resource{
+		Base: config.Base{
+			Type: "network",
+			Name: "aginctus-mgmt",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+	}
+
+	opts := &Options{
+		RequireExistingConfig: map[string]string{
+			"user.aginctus.managed": "true",
+		},
+	}
+	output, preview, plans := computeUpsertDiff(opts, client, []*config.Resource{res})
+	if len(plans) != 0 {
+		t.Fatalf("plans = %#v, want none", plans)
+	}
+	if got := output.Summary; got != "Summary: 1 errors." {
+		t.Fatalf("summary = %q, want planning error", got)
+	}
+	if err := preview.errorResult(); err == nil {
+		t.Fatal("preview error = nil, want guard failure")
+	}
+}
+
+func TestComputeUpsertDiff_ExistingResourceGuardAllowsOwnedResource(t *testing.T) {
+	client := newFakeClient()
+	client.exists["network/aginctus-mgmt"] = true
+	client.current["network/aginctus-mgmt"] = "config:\n  user.aginctus.managed: \"true\"\n  ipv4.address: 10.42.0.1/24\n"
+
+	res := &config.Resource{
+		Base: config.Base{
+			Type: "network",
+			Name: "aginctus-mgmt",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+				"ipv4.address":           "10.43.0.1/24",
+			},
+		},
+	}
+
+	opts := &Options{
+		RequireExistingConfig: map[string]string{
+			"user.aginctus.managed": "true",
+		},
+	}
+	_, preview, plans := computeUpsertDiff(opts, client, []*config.Resource{res})
+	if preview.updated != 1 {
+		t.Fatalf("updated = %d, want 1", preview.updated)
+	}
+	if len(plans) != 1 || plans[0].action != upsertUpdate {
+		t.Fatalf("plans = %#v, want update", plans)
+	}
+}
+
+func TestComputeDeleteDiff_ExistingResourceGuardRejectsForeignResource(t *testing.T) {
+	client := newFakeClient()
+	client.exists["network/aginctus-mgmt"] = true
+	client.current["network/aginctus-mgmt"] = "config:\n  user.aginctus.managed: \"false\"\n"
+
+	res := &config.Resource{Base: config.Base{Type: "network", Name: "aginctus-mgmt"}}
+	opts := &Options{
+		RequireExistingConfig: map[string]string{
+			"user.aginctus.managed": "true",
+		},
+	}
+	output, preview, plans := computeDeleteDiff(opts, client, []*config.Resource{res})
+	if len(plans) != 0 {
+		t.Fatalf("plans = %#v, want none", plans)
+	}
+	if got := output.Summary; got != "Summary: 1 errors." {
+		t.Fatalf("summary = %q, want planning error", got)
+	}
+	if err := preview.errorResult(); err == nil {
+		t.Fatal("preview error = nil, want guard failure")
+	}
+}
