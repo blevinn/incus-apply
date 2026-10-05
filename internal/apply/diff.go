@@ -1,8 +1,11 @@
 package apply
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/abiosoft/incus-apply/internal/config"
 	"github.com/abiosoft/incus-apply/internal/incus"
@@ -63,6 +66,12 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 		current, err := client.CurrentConfig(res)
 		if err != nil {
 			if preview.recordError(opts.FailFast, resourceID, "getting current config", err) != nil {
+				return buildOutput(), preview, plans
+			}
+			continue
+		}
+		if err := validateRequiredExistingConfig(current, opts.RequireExistingConfig); err != nil {
+			if preview.recordError(opts.FailFast, resourceID, "checking existing resource guard", err) != nil {
 				return buildOutput(), preview, plans
 			}
 			continue
@@ -178,11 +187,28 @@ func computeDeleteDiff(opts *Options, client incus.Client, resources []*config.R
 			notFound = append(notFound, OutputItem{ResourceID: resourceID})
 			preview.skipped++
 			plans = append(plans, deletePlan{res: res, skip: true})
-		} else {
-			deletes = append(deletes, OutputItem{ResourceID: resourceID})
-			preview.deleted++
-			plans = append(plans, deletePlan{res: res, skip: false})
+			continue
 		}
+
+		if len(opts.RequireExistingConfig) > 0 {
+			current, err := client.CurrentConfig(res)
+			if err != nil {
+				if preview.recordError(opts.FailFast, resourceID, "getting current config", err) != nil {
+					return buildOutput(), preview, plans
+				}
+				continue
+			}
+			if err := validateRequiredExistingConfig(current, opts.RequireExistingConfig); err != nil {
+				if preview.recordError(opts.FailFast, resourceID, "checking existing resource guard", err) != nil {
+					return buildOutput(), preview, plans
+				}
+				continue
+			}
+		}
+
+		deletes = append(deletes, OutputItem{ResourceID: resourceID})
+		preview.deleted++
+		plans = append(plans, deletePlan{res: res, skip: false})
 	}
 
 	return buildOutput(), preview, plans
@@ -252,4 +278,32 @@ func computeResetDiff(opts *Options, client incus.Client, deleteResources, creat
 	output.AddGroup(ActionCreate, createItems)
 	output.Summary = resetSummary(delPreview, createPreview)
 	return output, delPreview, delPlans, createPreview, createPlans
+}
+
+
+func validateRequiredExistingConfig(currentYAML string, required map[string]string) error {
+	if len(required) == 0 {
+		return nil
+	}
+
+	var current struct {
+		Config map[string]string `yaml:"config"`
+	}
+	if err := yaml.Unmarshal([]byte(currentYAML), &current); err != nil {
+		return fmt.Errorf("parse current resource config: %w", err)
+	}
+
+	keys := make([]string, 0, len(required))
+	for key := range required {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value, ok := current.Config[key]
+		if !ok || value != required[key] {
+			return fmt.Errorf("existing resource does not satisfy required config key %q", key)
+		}
+	}
+	return nil
 }
