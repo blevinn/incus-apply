@@ -1,9 +1,9 @@
 // Package apply exposes incus-apply reconciliation as an embeddable Go API.
 //
-// The current default backend preserves upstream behavior by invoking the Incus
-// CLI internally. That backend is transitional; callers should not depend on
-// command execution details. The public API is designed so a native Incus Go
-// backend can replace it without changing consumers.
+// New preserves upstream behavior by invoking the Incus CLI internally.
+// NewNative selects the direct Incus Go backend. Native support is intentionally
+// incremental; callers receive explicit unsupported-resource errors for kinds
+// that have not yet been implemented.
 package apply
 
 import (
@@ -73,12 +73,20 @@ type Client struct {
 }
 
 func New(options Options) *Client {
+	return newClient(options, newCommandBackend)
+}
+
+func NewNative(options Options) *Client {
+	return newClient(options, newNativeBackend)
+}
+
+func newClient(options Options, backend backendFactory) *Client {
 	if options.Operation == "" {
 		options.Operation = Upsert
 	}
 	return &Client{
 		options: options,
-		backend: newCommandBackend,
+		backend: backend,
 	}
 }
 
@@ -144,6 +152,10 @@ func validateOperation(operation Operation) error {
 	default:
 		return fmt.Errorf("unknown apply operation %q", operation)
 	}
+}
+
+func newNativeBackend(options Options) internalincus.Client {
+	return internalincus.NewNative(options.Remote, options.Stop)
 }
 
 func newCommandBackend(options Options) internalincus.Client {
