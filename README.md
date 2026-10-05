@@ -78,10 +78,11 @@ result, err := client.Execute(reader)
 changes. `Execute` performs the selected operation non-interactively and
 returns the same structured preview alongside the execution result.
 
-The current default backend still preserves upstream's command-backed Incus
-behavior. That backend is transitional; callers should depend on the public API,
-not command execution details. A native Incus Go backend is planned as the next
-fork-specific integration step.
+`apply.New` preserves upstream's command-backed Incus behavior. `apply.NewNative`
+selects the direct Incus Go backend. The initial native backend supports managed
+network resources end-to-end (plan, create, update, and delete) against the local
+Incus daemon. Other resource kinds and named remotes fail explicitly until their
+native implementations are added.
 
 ## Documentation
 
