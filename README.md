@@ -108,3 +108,12 @@ If you (or your company) are benefiting from the project and would like to suppo
 - [Github Sponsors](https://github.com/sponsors/abiosoft)
 - [Buy me a coffee](https://www.buymeacoffee.com/abiosoft)
 
+
+
+### Failing closed on create-only drift
+
+Embeddable callers can set `Options.RejectUnsupportedChanges` to make planning
+fail when an existing resource differs in a create-only field that cannot be
+updated in place. `Replace` still takes precedence when explicitly enabled.
+The option is disabled by default so existing CLI behavior continues to warn and
+ignore unsupported create-only changes.
