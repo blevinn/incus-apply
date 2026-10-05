@@ -13,6 +13,10 @@ import (
 	"github.com/abiosoft/incus-apply/internal/resource"
 )
 
+type nativeOperation interface {
+	Wait() error
+}
+
 type nativeAPI interface {
 	GetServer() (*incusapi.Server, string, error)
 	GetNetwork(string) (*incusapi.Network, string, error)
@@ -21,10 +25,30 @@ type nativeAPI interface {
 	DeleteNetwork(string) error
 
 	GetInstance(string) (*incusapi.Instance, string, error)
-	CreateInstance(incusapi.InstancesPost) (incusclient.Operation, error)
-	UpdateInstance(string, incusapi.InstancePut, string) (incusclient.Operation, error)
-	DeleteInstance(string) (incusclient.Operation, error)
-	UpdateInstanceState(string, incusapi.InstanceStatePut, string) (incusclient.Operation, error)
+	CreateInstance(incusapi.InstancesPost) (nativeOperation, error)
+	UpdateInstance(string, incusapi.InstancePut, string) (nativeOperation, error)
+	DeleteInstance(string) (nativeOperation, error)
+	UpdateInstanceState(string, incusapi.InstanceStatePut, string) (nativeOperation, error)
+}
+
+type nativeServer struct {
+	incusclient.InstanceServer
+}
+
+func (s nativeServer) CreateInstance(req incusapi.InstancesPost) (nativeOperation, error) {
+	return s.InstanceServer.CreateInstance(req)
+}
+
+func (s nativeServer) UpdateInstance(name string, req incusapi.InstancePut, etag string) (nativeOperation, error) {
+	return s.InstanceServer.UpdateInstance(name, req, etag)
+}
+
+func (s nativeServer) DeleteInstance(name string) (nativeOperation, error) {
+	return s.InstanceServer.DeleteInstance(name)
+}
+
+func (s nativeServer) UpdateInstanceState(name string, req incusapi.InstanceStatePut, etag string) (nativeOperation, error) {
+	return s.InstanceServer.UpdateInstanceState(name, req, etag)
 }
 
 type nativeClient struct {
@@ -52,9 +76,9 @@ func NewNative(remote string, stop bool) Client {
 			base = server
 		}
 		if project != "" {
-			return base.UseProject(project), nil
+			return nativeServer{InstanceServer: base.UseProject(project)}, nil
 		}
-		return base, nil
+		return nativeServer{InstanceServer: base}, nil
 	}
 	return c
 }
