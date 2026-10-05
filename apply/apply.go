@@ -28,6 +28,10 @@ type Options struct {
 	Project         string
 	Remote          string
 	Replace         bool
+	// RequireExistingConfig requires an existing resource to contain all
+	// specified config key/value pairs before update or delete. It does not
+	// affect creation and is empty by default to preserve upstream behavior.
+	RequireExistingConfig map[string]string
 	ShowEnv         bool
 	Stop            bool
 	NoLaunch        bool
@@ -118,7 +122,8 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 		CommandTimeout:  c.options.CommandTimeout,
 		Project:         c.options.Project,
 		Remote:          c.options.Remote,
-		Replace:         c.options.Replace,
+		Replace:               c.options.Replace,
+		RequireExistingConfig: c.options.RequireExistingConfig,
 		ShowEnv:         c.options.ShowEnv,
 		Stop:            c.options.Stop,
 		Launch:          !c.options.NoLaunch,
