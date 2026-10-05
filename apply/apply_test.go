@@ -108,3 +108,15 @@ func TestNoLaunchOption(t *testing.T) {
 		t.Fatal("NoLaunch was not preserved")
 	}
 }
+
+
+func TestRequireExistingConfigOption(t *testing.T) {
+	required := map[string]string{
+		"user.aginctus.managed":  "true",
+		"user.aginctus.resource": "management-network",
+	}
+	client := NewNative(Options{RequireExistingConfig: required})
+	if len(client.options.RequireExistingConfig) != 2 {
+		t.Fatalf("RequireExistingConfig = %#v", client.options.RequireExistingConfig)
+	}
+}
