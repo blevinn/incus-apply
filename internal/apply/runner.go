@@ -14,6 +14,7 @@ const (
 	upsertCreate                      // resource does not exist
 	upsertUpdate                      // resource exists and has changes
 	upsertReplace                     // resource must be deleted and recreated
+	upsertStart                       // instance is converged but should be running
 )
 
 // upsertPlan captures the create/update/skip decisions made during the diff
@@ -52,6 +53,8 @@ func (r *runner) upsert(plan upsertPlan) error {
 		return r.update(plan.res, formatResourceID(plan.res))
 	case upsertReplace:
 		return r.replace(plan.res, formatResourceID(plan.res))
+	case upsertStart:
+		return r.start(plan.res, formatResourceID(plan.res))
 	default: // upsertSkip
 		r.result.unchanged++
 		return nil
@@ -78,7 +81,22 @@ func (r *runner) update(res *config.Resource, resourceID string) error {
 	if result.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "update failed", result.Error)
 	}
+	if r.opts.EnsureRunning && resource.Type(res.Type) == resource.TypeInstance && !r.client.Running(res) {
+		if startResult := r.client.Start(res); startResult.Error != nil {
+			return r.result.recordError(r.opts.FailFast, resourceID, "start after update failed", startResult.Error)
+		}
+	}
 	printColored(r.opts.Quiet, colorYellow, "~ %s updated", resourceID)
+	r.result.updated++
+	return nil
+}
+
+func (r *runner) start(res *config.Resource, resourceID string) error {
+	result := r.client.Start(res)
+	if result.Error != nil {
+		return r.result.recordError(r.opts.FailFast, resourceID, "start failed", result.Error)
+	}
+	printColored(r.opts.Quiet, colorYellow, "~ %s started", resourceID)
 	r.result.updated++
 	return nil
 }
