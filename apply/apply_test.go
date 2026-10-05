@@ -119,3 +119,11 @@ func TestRequireExistingConfigOption(t *testing.T) {
 		t.Fatalf("RequireExistingConfig = %#v", client.options.RequireExistingConfig)
 	}
 }
+
+
+func TestEnsureRunningOption(t *testing.T) {
+	client := NewNative(Options{EnsureRunning: true})
+	if !client.options.EnsureRunning {
+		t.Fatal("EnsureRunning was not preserved")
+	}
+}
