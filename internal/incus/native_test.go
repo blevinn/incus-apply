@@ -379,3 +379,16 @@ func TestNativeExistsInstanceNotFound(t *testing.T) {
 		t.Fatal("Exists() = true, want false")
 	}
 }
+
+
+func TestNativeInstanceWaitsRemainExplicitlyUnsupported(t *testing.T) {
+	client := nativeWithFake(&fakeNativeAPI{})
+	res := &config.Resource{Base: config.Base{Type: "instance", Name: "vm"}}
+
+	if result := client.WaitInstanceAgent(res); result.Error == nil {
+		t.Fatal("WaitInstanceAgent() error = nil, want unsupported error")
+	}
+	if result := client.WaitCloudInit(res); result.Error == nil {
+		t.Fatal("WaitCloudInit() error = nil, want unsupported error")
+	}
+}
