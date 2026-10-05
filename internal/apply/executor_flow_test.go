@@ -554,3 +554,50 @@ func TestComputeDeleteDiff_ExistingResourceGuardRejectsForeignResource(t *testin
 		t.Fatal("preview error = nil, want guard failure")
 	}
 }
+
+
+func TestComputeUpsertDiffRejectsUnsupportedCreateOnlyDriftWhenRequested(t *testing.T) {
+	client := newFakeClient()
+	client.exists["network/aginctus-mgmt"] = true
+	client.current["network/aginctus-mgmt"] = "type: physical\nconfig:\n  user.aginctus.managed: \"true\"\n"
+
+	res := &config.Resource{
+		Base: config.Base{
+			Type: "network",
+			Name: "aginctus-mgmt",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+		NetworkFields: config.NetworkFields{NetworkType: "bridge"},
+	}
+
+	output, preview, plans := computeUpsertDiff(&Options{RejectUnsupportedChanges: true}, client, []*config.Resource{res})
+	if len(plans) != 0 {
+		t.Fatalf("plans = %#v, want none", plans)
+	}
+	if got := output.Summary; got != "Summary: 1 errors." {
+		t.Fatalf("summary = %q, want planning error", got)
+	}
+	if err := preview.errorResult(); err == nil {
+		t.Fatal("preview error = nil, want unsupported-change error")
+	}
+}
+
+func TestComputeUpsertDiffReplaceStillAllowsUnsupportedDrift(t *testing.T) {
+	client := newFakeClient()
+	client.exists["network/aginctus-mgmt"] = true
+	client.current["network/aginctus-mgmt"] = "type: physical\nconfig:\n  user.aginctus.managed: \"true\"\n"
+
+	res := &config.Resource{
+		Base: config.Base{Type: "network", Name: "aginctus-mgmt"},
+		NetworkFields: config.NetworkFields{NetworkType: "bridge"},
+	}
+	_, preview, plans := computeUpsertDiff(&Options{Replace: true, RejectUnsupportedChanges: true}, client, []*config.Resource{res})
+	if preview.replaced != 1 {
+		t.Fatalf("replaced = %d, want 1", preview.replaced)
+	}
+	if len(plans) != 1 || plans[0].action != upsertReplace {
+		t.Fatalf("plans = %#v, want replace", plans)
+	}
+}
