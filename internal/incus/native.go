@@ -3,6 +3,7 @@ package incus
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	incusapi "github.com/lxc/incus/v7/shared/api"
@@ -166,14 +167,18 @@ func (c *nativeClient) Delete(res *config.Resource) *Result {
 }
 
 func (c *nativeClient) Exists(res *config.Resource) (bool, error) {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return false, unsupportedNative(res, "exists").Error
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return false, err
 	}
-	_, _, err = server.GetNetwork(res.Name)
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		_, _, err = server.GetNetwork(res.Name)
+	case resource.TypeInstance:
+		_, _, err = server.GetInstance(res.Name)
+	default:
+		return false, unsupportedNative(res, "exists").Error
+	}
 	if err == nil {
 		return true, nil
 	}
@@ -184,20 +189,25 @@ func (c *nativeClient) Exists(res *config.Resource) (bool, error) {
 }
 
 func (c *nativeClient) CurrentConfig(res *config.Resource) (string, error) {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return "", unsupportedNative(res, "read current config").Error
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return "", err
 	}
-	network, _, err := server.GetNetwork(res.Name)
+	var value any
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		value, _, err = server.GetNetwork(res.Name)
+	case resource.TypeInstance:
+		value, _, err = server.GetInstance(res.Name)
+	default:
+		return "", unsupportedNative(res, "read current config").Error
+	}
 	if err != nil {
 		return "", err
 	}
-	data, err := yaml.Marshal(network)
+	data, err := yaml.Marshal(value)
 	if err != nil {
-		return "", fmt.Errorf("encode current network config: %w", err)
+		return "", fmt.Errorf("encode current %s config: %w", res.Type, err)
 	}
 	return string(data), nil
 }
@@ -215,15 +225,48 @@ func (c *nativeClient) MergedConfig(res *config.Resource) (string, error) {
 }
 
 func (c *nativeClient) Start(res *config.Resource) *Result {
-	return unsupportedNative(res, "start")
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return unsupportedNative(res, "start")
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	op, err := server.UpdateInstanceState(res.Name, incusapi.InstanceStatePut{Action: "start", Timeout: -1}, "")
+	if err != nil {
+		return resultFromError(err)
+	}
+	return resultFromError(op.Wait())
 }
 
 func (c *nativeClient) Stop(res *config.Resource) *Result {
-	return unsupportedNative(res, "stop")
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return unsupportedNative(res, "stop")
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	op, err := server.UpdateInstanceState(res.Name, incusapi.InstanceStatePut{Action: "stop", Timeout: -1, Force: true}, "")
+	if err != nil {
+		return resultFromError(err)
+	}
+	return resultFromError(op.Wait())
 }
 
-func (c *nativeClient) Running(*config.Resource) bool {
-	return false
+func (c *nativeClient) Running(res *config.Resource) bool {
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return false
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return false
+	}
+	instance, _, err := server.GetInstance(res.Name)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(instance.Status, "running")
 }
 
 func (c *nativeClient) WaitInstanceAgent(res *config.Resource) *Result {
@@ -245,6 +288,137 @@ func unsupportedNative(res *config.Resource, operation string) *Result {
 func resultFromError(err error) *Result {
 	if err != nil {
 		return &Result{Error: err, ExitCode: 1}
+	}
+	return &Result{}
+}
+
+
+func nativeInstanceCreateRequest(res *config.Resource) (incusapi.InstancesPost, error) {
+	instanceType := incusapi.InstanceTypeContainer
+	if res.VM.Bool() {
+		instanceType = incusapi.InstanceTypeVM
+	}
+	sourceType := "image"
+	source := incusapi.InstanceSource{Type: sourceType}
+	if res.Empty {
+		source.Type = "none"
+	} else {
+		if res.Image == "" {
+			return incusapi.InstancesPost{}, fmt.Errorf("instance %q requires image or empty=true", res.Name)
+		}
+		source.Alias = res.Image
+	}
+
+	devices, err := nativeDevices(res.Devices)
+	if err != nil {
+		return incusapi.InstancesPost{}, err
+	}
+	if res.Storage != "" {
+		if devices == nil {
+			devices = incusapi.DevicesMap{}
+		}
+		if _, ok := devices["root"]; !ok {
+			devices["root"] = map[string]string{
+				"type": "disk",
+				"path": "/",
+				"pool": res.Storage,
+			}
+		}
+	}
+	if res.Network != "" {
+		if devices == nil {
+			devices = incusapi.DevicesMap{}
+		}
+		if _, ok := devices["eth0"]; !ok {
+			devices["eth0"] = map[string]string{
+				"type":    "nic",
+				"network": res.Network,
+				"name":    "eth0",
+			}
+		}
+	}
+
+	return incusapi.InstancesPost{
+		Name:   res.Name,
+		Type:   instanceType,
+		Source: source,
+		InstancePut: incusapi.InstancePut{
+			Config:      res.Config,
+			Devices:     devices,
+			Ephemeral:   res.Ephemeral,
+			Profiles:    res.Profiles,
+			Description: res.Description,
+		},
+	}, nil
+}
+
+func nativeDevices(devices map[string]map[string]any) (incusapi.DevicesMap, error) {
+	if devices == nil {
+		return nil, nil
+	}
+	result := make(incusapi.DevicesMap, len(devices))
+	for name, device := range devices {
+		out := make(map[string]string, len(device))
+		for key, value := range device {
+			switch typed := value.(type) {
+			case string:
+				out[key] = typed
+			case fmt.Stringer:
+				out[key] = typed.String()
+			case nil:
+				return nil, fmt.Errorf("device %q field %q must not be null", name, key)
+			default:
+				out[key] = fmt.Sprint(typed)
+			}
+		}
+		result[name] = out
+	}
+	return result, nil
+}
+
+func (c *nativeClient) updateInstance(server nativeAPI, res *config.Resource) *Result {
+	current, etag, err := server.GetInstance(res.Name)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	currentYAML, err := yaml.Marshal(current)
+	if err != nil {
+		return &Result{Error: fmt.Errorf("encode current instance config: %w", err)}
+	}
+	merged, err := mergeConfigs(string(currentYAML), res)
+	if err != nil {
+		return &Result{Error: fmt.Errorf("merging configs: %w", err)}
+	}
+	var desired incusapi.Instance
+	if err := yaml.Unmarshal(merged, &desired); err != nil {
+		return &Result{Error: fmt.Errorf("decode merged instance config: %w", err)}
+	}
+
+	wasRunning := strings.EqualFold(current.Status, "running")
+	if c.stop && wasRunning {
+		if result := c.Stop(res); result.Error != nil {
+			return &Result{Error: fmt.Errorf("stopping instance for update: %w", result.Error)}
+		}
+	}
+
+	op, err := server.UpdateInstance(res.Name, desired.Writable(), etag)
+	if err != nil {
+		if c.stop && wasRunning {
+			_ = c.Start(res)
+		}
+		return resultFromError(err)
+	}
+	if err := op.Wait(); err != nil {
+		if c.stop && wasRunning {
+			_ = c.Start(res)
+		}
+		return resultFromError(err)
+	}
+
+	if c.stop && wasRunning {
+		if result := c.Start(res); result.Error != nil {
+			return &Result{Error: fmt.Errorf("restarting instance after update: %w", result.Error)}
+		}
 	}
 	return &Result{}
 }
