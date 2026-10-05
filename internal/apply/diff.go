@@ -118,6 +118,10 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 				preview.unchanged++
 				plans = append(plans, upsertPlan{res: res, action: upsertSkip})
 			}
+		} else if opts.EnsureRunning && resource.Type(res.Type) == resource.TypeInstance && !client.Running(res) {
+			updates = append(updates, OutputItem{ResourceID: resourceID, Note: "start"})
+			preview.updated++
+			plans = append(plans, upsertPlan{res: res, action: upsertStart})
 		} else {
 			unchanged = append(unchanged, OutputItem{ResourceID: resourceID})
 			preview.unchanged++
