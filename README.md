@@ -108,3 +108,12 @@ If you (or your company) are benefiting from the project and would like to suppo
 - [Github Sponsors](https://github.com/sponsors/abiosoft)
 - [Buy me a coffee](https://www.buymeacoffee.com/abiosoft)
 
+
+
+### Ensuring instance runtime state
+
+Embeddable callers can set `Options.EnsureRunning` when an instance should be
+both configuration-converged and running. A stopped instance with no
+configuration drift is planned as a start-only update; an instance that needs a
+configuration update is started after that update if necessary. The option is
+disabled by default and does not change CLI behavior.
