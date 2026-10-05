@@ -84,6 +84,12 @@ network resources end-to-end (plan, create, update, and delete) against the loca
 Incus daemon. Other resource kinds and named remotes fail explicitly until their
 native implementations are added.
 
+Library callers that must not adopt a same-named existing resource implicitly can
+set `Options.RequireExistingConfig`. Existing resources must contain every
+specified config key/value before update or delete; creation is unaffected. The
+option is empty by default so existing CLI and library adoption behavior remains
+backward compatible.
+
 ## Documentation
 
 Check the [project website](https://incus-apply.abiosoft.com).
