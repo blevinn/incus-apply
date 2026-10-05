@@ -1,9 +1,9 @@
 // Package apply exposes incus-apply reconciliation as an embeddable Go API.
 //
-// The current default backend preserves upstream behavior by invoking the Incus
-// CLI internally. That backend is transitional; callers should not depend on
-// command execution details. The public API is designed so a native Incus Go
-// backend can replace it without changing consumers.
+// New preserves upstream behavior by invoking the Incus CLI internally.
+// NewNative selects the direct Incus Go backend. Native support is intentionally
+// incremental; callers receive explicit unsupported-resource errors for kinds
+// that have not yet been implemented.
 package apply
 
 import (
