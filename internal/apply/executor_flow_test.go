@@ -470,7 +470,6 @@ func TestExecutorUpsert_DuplicateResourcesSameProjectFails(t *testing.T) {
 	}
 }
 
-
 func TestComputeUpsertDiff_ExistingResourceGuardRejectsForeignResource(t *testing.T) {
 	client := newFakeClient()
 	client.exists["network/aginctus-mgmt"] = true
@@ -514,7 +513,7 @@ func TestComputeUpsertDiff_ExistingResourceGuardAllowsOwnedResource(t *testing.T
 			Name: "aginctus-mgmt",
 			Config: map[string]string{
 				"user.aginctus.managed": "true",
-				"ipv4.address":           "10.43.0.1/24",
+				"ipv4.address":          "10.43.0.1/24",
 			},
 		},
 	}

@@ -280,7 +280,6 @@ func computeResetDiff(opts *Options, client incus.Client, deleteResources, creat
 	return output, delPreview, delPlans, createPreview, createPlans
 }
 
-
 func validateRequiredExistingConfig(currentYAML string, required map[string]string) error {
 	if len(required) == 0 {
 		return nil

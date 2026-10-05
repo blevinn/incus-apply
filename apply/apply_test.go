@@ -109,7 +109,6 @@ func TestNoLaunchOption(t *testing.T) {
 	}
 }
 
-
 func TestRequireExistingConfigOption(t *testing.T) {
 	required := map[string]string{
 		"user.aginctus.managed":  "true",
