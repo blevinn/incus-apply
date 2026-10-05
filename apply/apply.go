@@ -73,12 +73,20 @@ type Client struct {
 }
 
 func New(options Options) *Client {
+	return newClient(options, newCommandBackend)
+}
+
+func NewNative(options Options) *Client {
+	return newClient(options, newNativeBackend)
+}
+
+func newClient(options Options, backend backendFactory) *Client {
 	if options.Operation == "" {
 		options.Operation = Upsert
 	}
 	return &Client{
 		options: options,
-		backend: newCommandBackend,
+		backend: backend,
 	}
 }
 
@@ -144,6 +152,10 @@ func validateOperation(operation Operation) error {
 	default:
 		return fmt.Errorf("unknown apply operation %q", operation)
 	}
+}
+
+func newNativeBackend(options Options) internalincus.Client {
+	return internalincus.NewNative(options.Remote, options.Stop)
 }
 
 func newCommandBackend(options Options) internalincus.Client {
