@@ -12,19 +12,25 @@ import (
 	"github.com/abiosoft/incus-apply/internal/resource"
 )
 
-type nativeNetworkAPI interface {
+type nativeAPI interface {
 	GetServer() (*incusapi.Server, string, error)
 	GetNetwork(string) (*incusapi.Network, string, error)
 	CreateNetwork(incusapi.NetworksPost) error
 	UpdateNetwork(string, incusapi.NetworkPut, string) error
 	DeleteNetwork(string) error
+
+	GetInstance(string) (*incusapi.Instance, string, error)
+	CreateInstance(incusapi.InstancesPost) (incusclient.Operation, error)
+	UpdateInstance(string, incusapi.InstancePut, string) (incusclient.Operation, error)
+	DeleteInstance(string) (incusclient.Operation, error)
+	UpdateInstanceState(string, incusapi.InstanceStatePut, string) (incusclient.Operation, error)
 }
 
 type nativeClient struct {
 	remote string
 	stop   bool
 
-	connect func(project string) (nativeNetworkAPI, error)
+	connect func(project string) (nativeAPI, error)
 }
 
 func NewNative(remote string, stop bool) Client {
@@ -33,7 +39,7 @@ func NewNative(remote string, stop bool) Client {
 		stop:   stop,
 	}
 	var base incusclient.InstanceServer
-	c.connect = func(project string) (nativeNetworkAPI, error) {
+	c.connect = func(project string) (nativeAPI, error) {
 		if remote != "" {
 			return nil, fmt.Errorf("native Incus backend does not yet support named remote %q", remote)
 		}
@@ -52,7 +58,7 @@ func NewNative(remote string, stop bool) Client {
 	return c
 }
 
-func (c *nativeClient) project(res *config.Resource) (nativeNetworkAPI, error) {
+func (c *nativeClient) project(res *config.Resource) (nativeAPI, error) {
 	project := ""
 	if res != nil {
 		project = res.Project
@@ -72,10 +78,6 @@ func (c *nativeClient) Ping() error {
 }
 
 func (c *nativeClient) Create(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "create")
-	}
-
 	var enc snapshotCodec = v1SnapshotCodec{}
 	prepared, _, err := desiredForApply(res, enc)
 	if err != nil {
@@ -85,54 +87,82 @@ func (c *nativeClient) Create(res *config.Resource) *Result {
 	if err != nil {
 		return &Result{Error: err}
 	}
-	err = server.CreateNetwork(incusapi.NetworksPost{
-		Name: prepared.Name,
-		Type: prepared.NetworkType,
-		NetworkPut: incusapi.NetworkPut{
-			Config:      prepared.Config,
-			Description: prepared.Description,
-		},
-	})
-	return resultFromError(err)
+
+	switch resource.Type(prepared.Type) {
+	case resource.TypeNetwork:
+		err = server.CreateNetwork(incusapi.NetworksPost{
+			Name: prepared.Name,
+			Type: prepared.NetworkType,
+			NetworkPut: incusapi.NetworkPut{
+				Config:      prepared.Config,
+				Description: prepared.Description,
+			},
+		})
+		return resultFromError(err)
+	case resource.TypeInstance:
+		request, err := nativeInstanceCreateRequest(prepared)
+		if err != nil {
+			return &Result{Error: err}
+		}
+		op, err := server.CreateInstance(request)
+		if err != nil {
+			return resultFromError(err)
+		}
+		return resultFromError(op.Wait())
+	default:
+		return unsupportedNative(res, "create")
+	}
 }
 
 func (c *nativeClient) Update(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "update")
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return &Result{Error: err}
 	}
-	current, etag, err := server.GetNetwork(res.Name)
-	if err != nil {
-		return &Result{Error: err}
+
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		current, etag, err := server.GetNetwork(res.Name)
+		if err != nil {
+			return &Result{Error: err}
+		}
+		currentYAML, err := yaml.Marshal(current)
+		if err != nil {
+			return &Result{Error: fmt.Errorf("encode current network config: %w", err)}
+		}
+		merged, err := mergeConfigs(string(currentYAML), res)
+		if err != nil {
+			return &Result{Error: fmt.Errorf("merging configs: %w", err)}
+		}
+		var desired incusapi.Network
+		if err := yaml.Unmarshal(merged, &desired); err != nil {
+			return &Result{Error: fmt.Errorf("decode merged network config: %w", err)}
+		}
+		return resultFromError(server.UpdateNetwork(res.Name, desired.Writable(), etag))
+	case resource.TypeInstance:
+		return c.updateInstance(server, res)
+	default:
+		return unsupportedNative(res, "update")
 	}
-	currentYAML, err := yaml.Marshal(current)
-	if err != nil {
-		return &Result{Error: fmt.Errorf("encode current network config: %w", err)}
-	}
-	merged, err := mergeConfigs(string(currentYAML), res)
-	if err != nil {
-		return &Result{Error: fmt.Errorf("merging configs: %w", err)}
-	}
-	var desired incusapi.Network
-	if err := yaml.Unmarshal(merged, &desired); err != nil {
-		return &Result{Error: fmt.Errorf("decode merged network config: %w", err)}
-	}
-	err = server.UpdateNetwork(res.Name, desired.Writable(), etag)
-	return resultFromError(err)
 }
 
 func (c *nativeClient) Delete(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "delete")
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return &Result{Error: err}
 	}
-	return resultFromError(server.DeleteNetwork(res.Name))
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		return resultFromError(server.DeleteNetwork(res.Name))
+	case resource.TypeInstance:
+		op, err := server.DeleteInstance(res.Name)
+		if err != nil {
+			return resultFromError(err)
+		}
+		return resultFromError(op.Wait())
+	default:
+		return unsupportedNative(res, "delete")
+	}
 }
 
 func (c *nativeClient) Exists(res *config.Resource) (bool, error) {
