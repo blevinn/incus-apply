@@ -20,17 +20,21 @@ type Options struct {
 	CommandTimeout time.Duration
 
 	// Operation modes
-	Delete          bool
-	Reset           bool
-	Select          bool
-	Yes             bool
-	Diff            string
-	Replace         bool
-	ShowEnv         bool
-	Stop            bool
-	Launch          bool
-	FailFast        bool
-	NoWaitCloudInit bool
+	Delete  bool
+	Reset   bool
+	Select  bool
+	Yes     bool
+	Diff    string
+	Replace bool
+	// RequireExistingConfig requires existing resources to contain the given
+	// config key/value pairs before they may be updated or deleted. Creation is
+	// unaffected. A nil or empty map preserves the default adoption behavior.
+	RequireExistingConfig map[string]string
+	ShowEnv               bool
+	Stop                  bool
+	Launch                bool
+	FailFast              bool
+	NoWaitCloudInit       bool
 
 	// Internal state (not flags)
 	FileCount int

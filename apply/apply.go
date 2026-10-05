@@ -24,17 +24,21 @@ const (
 )
 
 type Options struct {
-	Operation       Operation
-	Project         string
-	Remote          string
-	Replace         bool
-	ShowEnv         bool
-	Stop            bool
-	NoLaunch        bool
-	FailFast        bool
-	NoWaitCloudInit bool
-	ForceLocal      bool
-	CommandTimeout  time.Duration
+	Operation Operation
+	Project   string
+	Remote    string
+	Replace   bool
+	// RequireExistingConfig requires an existing resource to contain all
+	// specified config key/value pairs before update or delete. It does not
+	// affect creation and is empty by default to preserve upstream behavior.
+	RequireExistingConfig map[string]string
+	ShowEnv               bool
+	Stop                  bool
+	NoLaunch              bool
+	FailFast              bool
+	NoWaitCloudInit       bool
+	ForceLocal            bool
+	CommandTimeout        time.Duration
 }
 
 type Change struct {
@@ -114,19 +118,20 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 
 	renderer := &captureRenderer{}
 	opts := internalapply.Options{
-		Reader:          reader,
-		CommandTimeout:  c.options.CommandTimeout,
-		Project:         c.options.Project,
-		Remote:          c.options.Remote,
-		Replace:         c.options.Replace,
-		ShowEnv:         c.options.ShowEnv,
-		Stop:            c.options.Stop,
-		Launch:          !c.options.NoLaunch,
-		FailFast:        c.options.FailFast,
-		NoWaitCloudInit: c.options.NoWaitCloudInit,
-		ForceLocal:      c.options.ForceLocal,
-		Quiet:           true,
-		Yes:             true,
+		Reader:                reader,
+		CommandTimeout:        c.options.CommandTimeout,
+		Project:               c.options.Project,
+		Remote:                c.options.Remote,
+		Replace:               c.options.Replace,
+		RequireExistingConfig: c.options.RequireExistingConfig,
+		ShowEnv:               c.options.ShowEnv,
+		Stop:                  c.options.Stop,
+		Launch:                !c.options.NoLaunch,
+		FailFast:              c.options.FailFast,
+		NoWaitCloudInit:       c.options.NoWaitCloudInit,
+		ForceLocal:            c.options.ForceLocal,
+		Quiet:                 true,
+		Yes:                   true,
 	}
 	if planOnly {
 		opts.Diff = "json"
