@@ -111,9 +111,9 @@ func (f *fakeNativeAPI) UpdateInstanceState(name string, state incusapi.Instance
 	return fakeNativeOperation{}, nil
 }
 
-func nativeWithFake(api nativeNetworkAPI) *nativeClient {
+func nativeWithFake(api nativeAPI) *nativeClient {
 	return &nativeClient{
-		connect: func(string) (nativeNetworkAPI, error) {
+		connect: func(string) (nativeAPI, error) {
 			return api, nil
 		},
 	}
