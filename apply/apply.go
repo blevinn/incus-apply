@@ -28,6 +28,9 @@ type Options struct {
 	Project   string
 	Remote    string
 	Replace   bool
+	// RejectUnsupportedChanges fails instead of ignoring create-only drift when
+	// replacement has not been requested.
+	RejectUnsupportedChanges bool
 	// RequireExistingConfig requires an existing resource to contain all
 	// specified config key/value pairs before update or delete. It does not
 	// affect creation and is empty by default to preserve upstream behavior.
@@ -118,20 +121,21 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 
 	renderer := &captureRenderer{}
 	opts := internalapply.Options{
-		Reader:                reader,
-		CommandTimeout:        c.options.CommandTimeout,
-		Project:               c.options.Project,
-		Remote:                c.options.Remote,
-		Replace:               c.options.Replace,
-		RequireExistingConfig: c.options.RequireExistingConfig,
-		ShowEnv:               c.options.ShowEnv,
-		Stop:                  c.options.Stop,
-		Launch:                !c.options.NoLaunch,
-		FailFast:              c.options.FailFast,
-		NoWaitCloudInit:       c.options.NoWaitCloudInit,
-		ForceLocal:            c.options.ForceLocal,
-		Quiet:                 true,
-		Yes:                   true,
+		Reader:                   reader,
+		CommandTimeout:           c.options.CommandTimeout,
+		Project:                  c.options.Project,
+		Remote:                   c.options.Remote,
+		Replace:                  c.options.Replace,
+		RejectUnsupportedChanges: c.options.RejectUnsupportedChanges,
+		RequireExistingConfig:    c.options.RequireExistingConfig,
+		ShowEnv:                  c.options.ShowEnv,
+		Stop:                     c.options.Stop,
+		Launch:                   !c.options.NoLaunch,
+		FailFast:                 c.options.FailFast,
+		NoWaitCloudInit:          c.options.NoWaitCloudInit,
+		ForceLocal:               c.options.ForceLocal,
+		Quiet:                    true,
+		Yes:                      true,
 	}
 	if planOnly {
 		opts.Diff = "json"

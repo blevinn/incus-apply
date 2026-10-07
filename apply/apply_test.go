@@ -119,3 +119,10 @@ func TestRequireExistingConfigOption(t *testing.T) {
 		t.Fatalf("RequireExistingConfig = %#v", client.options.RequireExistingConfig)
 	}
 }
+
+func TestRejectUnsupportedChangesOption(t *testing.T) {
+	client := NewNative(Options{RejectUnsupportedChanges: true})
+	if !client.options.RejectUnsupportedChanges {
+		t.Fatal("RejectUnsupportedChanges was not preserved")
+	}
+}
