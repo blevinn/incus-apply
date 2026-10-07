@@ -118,21 +118,21 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 
 	renderer := &captureRenderer{}
 	opts := internalapply.Options{
-		Reader:                reader,
-		CommandTimeout:        c.options.CommandTimeout,
-		Project:               c.options.Project,
-		Remote:                c.options.Remote,
+		Reader:                   reader,
+		CommandTimeout:           c.options.CommandTimeout,
+		Project:                  c.options.Project,
+		Remote:                   c.options.Remote,
 		Replace:                  c.options.Replace,
 		RejectUnsupportedChanges: c.options.RejectUnsupportedChanges,
-		RequireExistingConfig: c.options.RequireExistingConfig,
-		ShowEnv:               c.options.ShowEnv,
-		Stop:                  c.options.Stop,
-		Launch:                !c.options.NoLaunch,
-		FailFast:              c.options.FailFast,
-		NoWaitCloudInit:       c.options.NoWaitCloudInit,
-		ForceLocal:            c.options.ForceLocal,
-		Quiet:                 true,
-		Yes:                   true,
+		RequireExistingConfig:    c.options.RequireExistingConfig,
+		ShowEnv:                  c.options.ShowEnv,
+		Stop:                     c.options.Stop,
+		Launch:                   !c.options.NoLaunch,
+		FailFast:                 c.options.FailFast,
+		NoWaitCloudInit:          c.options.NoWaitCloudInit,
+		ForceLocal:               c.options.ForceLocal,
+		Quiet:                    true,
+		Yes:                      true,
 	}
 	if planOnly {
 		opts.Diff = "json"
