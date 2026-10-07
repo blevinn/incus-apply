@@ -79,10 +79,13 @@ changes. `Execute` performs the selected operation non-interactively and
 returns the same structured preview alongside the execution result.
 
 `apply.New` preserves upstream's command-backed Incus behavior. `apply.NewNative`
-selects the direct Incus Go backend. The initial native backend supports managed
-network resources end-to-end (plan, create, update, and delete) against the local
-Incus daemon. Other resource kinds and named remotes fail explicitly until their
-native implementations are added.
+selects the direct Incus Go backend. The native backend currently supports managed
+network resources and basic instance lifecycle against the local Incus daemon,
+including plan, create, update, delete, start, stop, and running-state checks.
+Native instance creation supports local image aliases, empty instances, profiles,
+config, devices, storage/network convenience fields, containers, and VMs. Native
+cloud-init waits and VM-agent waits are not implemented yet and fail explicitly;
+named remotes and other resource kinds remain unsupported until added.
 
 Library callers that must not adopt a same-named existing resource implicitly can
 set `Options.RequireExistingConfig`. Existing resources must contain every

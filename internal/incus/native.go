@@ -3,6 +3,7 @@ package incus
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	incusapi "github.com/lxc/incus/v7/shared/api"
@@ -12,19 +13,49 @@ import (
 	"github.com/abiosoft/incus-apply/internal/resource"
 )
 
-type nativeNetworkAPI interface {
+type nativeOperation interface {
+	Wait() error
+}
+
+type nativeAPI interface {
 	GetServer() (*incusapi.Server, string, error)
 	GetNetwork(string) (*incusapi.Network, string, error)
 	CreateNetwork(incusapi.NetworksPost) error
 	UpdateNetwork(string, incusapi.NetworkPut, string) error
 	DeleteNetwork(string) error
+
+	GetInstance(string) (*incusapi.Instance, string, error)
+	CreateInstance(incusapi.InstancesPost) (nativeOperation, error)
+	UpdateInstance(string, incusapi.InstancePut, string) (nativeOperation, error)
+	DeleteInstance(string) (nativeOperation, error)
+	UpdateInstanceState(string, incusapi.InstanceStatePut, string) (nativeOperation, error)
+}
+
+type nativeServer struct {
+	incusclient.InstanceServer
+}
+
+func (s nativeServer) CreateInstance(req incusapi.InstancesPost) (nativeOperation, error) {
+	return s.InstanceServer.CreateInstance(req)
+}
+
+func (s nativeServer) UpdateInstance(name string, req incusapi.InstancePut, etag string) (nativeOperation, error) {
+	return s.InstanceServer.UpdateInstance(name, req, etag)
+}
+
+func (s nativeServer) DeleteInstance(name string) (nativeOperation, error) {
+	return s.InstanceServer.DeleteInstance(name)
+}
+
+func (s nativeServer) UpdateInstanceState(name string, req incusapi.InstanceStatePut, etag string) (nativeOperation, error) {
+	return s.InstanceServer.UpdateInstanceState(name, req, etag)
 }
 
 type nativeClient struct {
 	remote string
 	stop   bool
 
-	connect func(project string) (nativeNetworkAPI, error)
+	connect func(project string) (nativeAPI, error)
 }
 
 func NewNative(remote string, stop bool) Client {
@@ -33,7 +64,7 @@ func NewNative(remote string, stop bool) Client {
 		stop:   stop,
 	}
 	var base incusclient.InstanceServer
-	c.connect = func(project string) (nativeNetworkAPI, error) {
+	c.connect = func(project string) (nativeAPI, error) {
 		if remote != "" {
 			return nil, fmt.Errorf("native Incus backend does not yet support named remote %q", remote)
 		}
@@ -45,14 +76,14 @@ func NewNative(remote string, stop bool) Client {
 			base = server
 		}
 		if project != "" {
-			return base.UseProject(project), nil
+			return nativeServer{InstanceServer: base.UseProject(project)}, nil
 		}
-		return base, nil
+		return nativeServer{InstanceServer: base}, nil
 	}
 	return c
 }
 
-func (c *nativeClient) project(res *config.Resource) (nativeNetworkAPI, error) {
+func (c *nativeClient) project(res *config.Resource) (nativeAPI, error) {
 	project := ""
 	if res != nil {
 		project = res.Project
@@ -72,10 +103,6 @@ func (c *nativeClient) Ping() error {
 }
 
 func (c *nativeClient) Create(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "create")
-	}
-
 	var enc snapshotCodec = v1SnapshotCodec{}
 	prepared, _, err := desiredForApply(res, enc)
 	if err != nil {
@@ -85,65 +112,97 @@ func (c *nativeClient) Create(res *config.Resource) *Result {
 	if err != nil {
 		return &Result{Error: err}
 	}
-	err = server.CreateNetwork(incusapi.NetworksPost{
-		Name: prepared.Name,
-		Type: prepared.NetworkType,
-		NetworkPut: incusapi.NetworkPut{
-			Config:      prepared.Config,
-			Description: prepared.Description,
-		},
-	})
-	return resultFromError(err)
+
+	switch resource.Type(prepared.Type) {
+	case resource.TypeNetwork:
+		err = server.CreateNetwork(incusapi.NetworksPost{
+			Name: prepared.Name,
+			Type: prepared.NetworkType,
+			NetworkPut: incusapi.NetworkPut{
+				Config:      prepared.Config,
+				Description: prepared.Description,
+			},
+		})
+		return resultFromError(err)
+	case resource.TypeInstance:
+		request, err := nativeInstanceCreateRequest(prepared)
+		if err != nil {
+			return &Result{Error: err}
+		}
+		op, err := server.CreateInstance(request)
+		if err != nil {
+			return resultFromError(err)
+		}
+		return resultFromError(op.Wait())
+	default:
+		return unsupportedNative(res, "create")
+	}
 }
 
 func (c *nativeClient) Update(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "update")
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return &Result{Error: err}
 	}
-	current, etag, err := server.GetNetwork(res.Name)
-	if err != nil {
-		return &Result{Error: err}
+
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		current, etag, err := server.GetNetwork(res.Name)
+		if err != nil {
+			return &Result{Error: err}
+		}
+		currentYAML, err := yaml.Marshal(current)
+		if err != nil {
+			return &Result{Error: fmt.Errorf("encode current network config: %w", err)}
+		}
+		merged, err := mergeConfigs(string(currentYAML), res)
+		if err != nil {
+			return &Result{Error: fmt.Errorf("merging configs: %w", err)}
+		}
+		var desired incusapi.Network
+		if err := yaml.Unmarshal(merged, &desired); err != nil {
+			return &Result{Error: fmt.Errorf("decode merged network config: %w", err)}
+		}
+		return resultFromError(server.UpdateNetwork(res.Name, desired.Writable(), etag))
+	case resource.TypeInstance:
+		return c.updateInstance(server, res)
+	default:
+		return unsupportedNative(res, "update")
 	}
-	currentYAML, err := yaml.Marshal(current)
-	if err != nil {
-		return &Result{Error: fmt.Errorf("encode current network config: %w", err)}
-	}
-	merged, err := mergeConfigs(string(currentYAML), res)
-	if err != nil {
-		return &Result{Error: fmt.Errorf("merging configs: %w", err)}
-	}
-	var desired incusapi.Network
-	if err := yaml.Unmarshal(merged, &desired); err != nil {
-		return &Result{Error: fmt.Errorf("decode merged network config: %w", err)}
-	}
-	err = server.UpdateNetwork(res.Name, desired.Writable(), etag)
-	return resultFromError(err)
 }
 
 func (c *nativeClient) Delete(res *config.Resource) *Result {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return unsupportedNative(res, "delete")
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return &Result{Error: err}
 	}
-	return resultFromError(server.DeleteNetwork(res.Name))
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		return resultFromError(server.DeleteNetwork(res.Name))
+	case resource.TypeInstance:
+		op, err := server.DeleteInstance(res.Name)
+		if err != nil {
+			return resultFromError(err)
+		}
+		return resultFromError(op.Wait())
+	default:
+		return unsupportedNative(res, "delete")
+	}
 }
 
 func (c *nativeClient) Exists(res *config.Resource) (bool, error) {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return false, unsupportedNative(res, "exists").Error
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return false, err
 	}
-	_, _, err = server.GetNetwork(res.Name)
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		_, _, err = server.GetNetwork(res.Name)
+	case resource.TypeInstance:
+		_, _, err = server.GetInstance(res.Name)
+	default:
+		return false, unsupportedNative(res, "exists").Error
+	}
 	if err == nil {
 		return true, nil
 	}
@@ -154,20 +213,25 @@ func (c *nativeClient) Exists(res *config.Resource) (bool, error) {
 }
 
 func (c *nativeClient) CurrentConfig(res *config.Resource) (string, error) {
-	if resource.Type(res.Type) != resource.TypeNetwork {
-		return "", unsupportedNative(res, "read current config").Error
-	}
 	server, err := c.project(res)
 	if err != nil {
 		return "", err
 	}
-	network, _, err := server.GetNetwork(res.Name)
+	var value any
+	switch resource.Type(res.Type) {
+	case resource.TypeNetwork:
+		value, _, err = server.GetNetwork(res.Name)
+	case resource.TypeInstance:
+		value, _, err = server.GetInstance(res.Name)
+	default:
+		return "", unsupportedNative(res, "read current config").Error
+	}
 	if err != nil {
 		return "", err
 	}
-	data, err := yaml.Marshal(network)
+	data, err := yaml.Marshal(value)
 	if err != nil {
-		return "", fmt.Errorf("encode current network config: %w", err)
+		return "", fmt.Errorf("encode current %s config: %w", res.Type, err)
 	}
 	return string(data), nil
 }
@@ -185,15 +249,48 @@ func (c *nativeClient) MergedConfig(res *config.Resource) (string, error) {
 }
 
 func (c *nativeClient) Start(res *config.Resource) *Result {
-	return unsupportedNative(res, "start")
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return unsupportedNative(res, "start")
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	op, err := server.UpdateInstanceState(res.Name, incusapi.InstanceStatePut{Action: "start", Timeout: -1}, "")
+	if err != nil {
+		return resultFromError(err)
+	}
+	return resultFromError(op.Wait())
 }
 
 func (c *nativeClient) Stop(res *config.Resource) *Result {
-	return unsupportedNative(res, "stop")
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return unsupportedNative(res, "stop")
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	op, err := server.UpdateInstanceState(res.Name, incusapi.InstanceStatePut{Action: "stop", Timeout: -1, Force: true}, "")
+	if err != nil {
+		return resultFromError(err)
+	}
+	return resultFromError(op.Wait())
 }
 
-func (c *nativeClient) Running(*config.Resource) bool {
-	return false
+func (c *nativeClient) Running(res *config.Resource) bool {
+	if resource.Type(res.Type) != resource.TypeInstance {
+		return false
+	}
+	server, err := c.project(res)
+	if err != nil {
+		return false
+	}
+	instance, _, err := server.GetInstance(res.Name)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(instance.Status, "running")
 }
 
 func (c *nativeClient) WaitInstanceAgent(res *config.Resource) *Result {
@@ -215,6 +312,136 @@ func unsupportedNative(res *config.Resource, operation string) *Result {
 func resultFromError(err error) *Result {
 	if err != nil {
 		return &Result{Error: err, ExitCode: 1}
+	}
+	return &Result{}
+}
+
+func nativeInstanceCreateRequest(res *config.Resource) (incusapi.InstancesPost, error) {
+	instanceType := incusapi.InstanceTypeContainer
+	if res.VM.Bool() {
+		instanceType = incusapi.InstanceTypeVM
+	}
+	sourceType := "image"
+	source := incusapi.InstanceSource{Type: sourceType}
+	if res.Empty {
+		source.Type = "none"
+	} else {
+		if res.Image == "" {
+			return incusapi.InstancesPost{}, fmt.Errorf("instance %q requires image or empty=true", res.Name)
+		}
+		source.Alias = res.Image
+	}
+
+	devices, err := nativeDevices(res.Devices)
+	if err != nil {
+		return incusapi.InstancesPost{}, err
+	}
+	if res.Storage != "" {
+		if devices == nil {
+			devices = incusapi.DevicesMap{}
+		}
+		if _, ok := devices["root"]; !ok {
+			devices["root"] = map[string]string{
+				"type": "disk",
+				"path": "/",
+				"pool": res.Storage,
+			}
+		}
+	}
+	if res.Network != "" {
+		if devices == nil {
+			devices = incusapi.DevicesMap{}
+		}
+		if _, ok := devices["eth0"]; !ok {
+			devices["eth0"] = map[string]string{
+				"type":    "nic",
+				"network": res.Network,
+				"name":    "eth0",
+			}
+		}
+	}
+
+	return incusapi.InstancesPost{
+		Name:   res.Name,
+		Type:   instanceType,
+		Source: source,
+		InstancePut: incusapi.InstancePut{
+			Config:      res.Config,
+			Devices:     devices,
+			Ephemeral:   res.Ephemeral,
+			Profiles:    res.Profiles,
+			Description: res.Description,
+		},
+	}, nil
+}
+
+func nativeDevices(devices map[string]map[string]any) (incusapi.DevicesMap, error) {
+	if devices == nil {
+		return nil, nil
+	}
+	result := make(incusapi.DevicesMap, len(devices))
+	for name, device := range devices {
+		out := make(map[string]string, len(device))
+		for key, value := range device {
+			switch typed := value.(type) {
+			case string:
+				out[key] = typed
+			case fmt.Stringer:
+				out[key] = typed.String()
+			case nil:
+				return nil, fmt.Errorf("device %q field %q must not be null", name, key)
+			default:
+				out[key] = fmt.Sprint(typed)
+			}
+		}
+		result[name] = out
+	}
+	return result, nil
+}
+
+func (c *nativeClient) updateInstance(server nativeAPI, res *config.Resource) *Result {
+	current, etag, err := server.GetInstance(res.Name)
+	if err != nil {
+		return &Result{Error: err}
+	}
+	currentYAML, err := yaml.Marshal(current)
+	if err != nil {
+		return &Result{Error: fmt.Errorf("encode current instance config: %w", err)}
+	}
+	merged, err := mergeConfigs(string(currentYAML), res)
+	if err != nil {
+		return &Result{Error: fmt.Errorf("merging configs: %w", err)}
+	}
+	var desired incusapi.Instance
+	if err := yaml.Unmarshal(merged, &desired); err != nil {
+		return &Result{Error: fmt.Errorf("decode merged instance config: %w", err)}
+	}
+
+	wasRunning := strings.EqualFold(current.Status, "running")
+	if c.stop && wasRunning {
+		if result := c.Stop(res); result.Error != nil {
+			return &Result{Error: fmt.Errorf("stopping instance for update: %w", result.Error)}
+		}
+	}
+
+	op, err := server.UpdateInstance(res.Name, desired.Writable(), etag)
+	if err != nil {
+		if c.stop && wasRunning {
+			_ = c.Start(res)
+		}
+		return resultFromError(err)
+	}
+	if err := op.Wait(); err != nil {
+		if c.stop && wasRunning {
+			_ = c.Start(res)
+		}
+		return resultFromError(err)
+	}
+
+	if c.stop && wasRunning {
+		if result := c.Start(res); result.Error != nil {
+			return &Result{Error: fmt.Errorf("restarting instance after update: %w", result.Error)}
+		}
 	}
 	return &Result{}
 }
