@@ -86,7 +86,7 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 		}
 		redactPreviewDiff(diff, res, opts.ShowEnv)
 
-		if len(diff) > 0 {
+		if len(diff) > 0 || len(status.UnsupportedChanges) > 0 {
 			item := OutputItem{ResourceID: resourceID, Changes: diff}
 			if opts.Stop && resource.Type(res.Type) == resource.TypeInstance && client.Running(res) {
 				item.Note = "restart"
