@@ -63,7 +63,17 @@ func DiffResource(currentYAML string, desired *config.Resource) ([]DiffChange, M
 		return nil, status, err
 	}
 	changes, err := DiffChanges(currentYAML, string(merged))
-	return changes, status, err
+	if err != nil {
+		return nil, status, err
+	}
+	status.UnsupportedChanges, err = unsupportedLiveChanges(currentYAML, desired)
+	if err != nil {
+		return nil, status, err
+	}
+	if len(status.UnsupportedChanges) > 0 {
+		status.Warning = ManagementWarningRecreate
+	}
+	return changes, status, nil
 }
 
 func managedSnapshot(res *config.Resource) (string, error) {
@@ -455,5 +465,28 @@ func createOnlyFields(resourceType string) map[string]bool {
 		}
 	default:
 		return nil
+	}
+}
+
+func unsupportedLiveChanges(currentYAML string, desired *config.Resource) ([]DiffChange, error) {
+	current, err := parseYAMLToMap(currentYAML, "current config")
+	if err != nil {
+		return nil, err
+	}
+
+	switch desired.Type {
+	case "network":
+		currentType, _ := current["type"].(string)
+		if currentType == "" || desired.NetworkType == "" || currentType == desired.NetworkType {
+			return nil, nil
+		}
+		return []DiffChange{{
+			Path:   "networkType",
+			Old:    currentType,
+			New:    desired.NetworkType,
+			Action: "modify",
+		}}, nil
+	default:
+		return nil, nil
 	}
 }
