@@ -486,6 +486,24 @@ func unsupportedLiveChanges(currentYAML string, desired *config.Resource) ([]Dif
 			New:    desired.NetworkType,
 			Action: "modify",
 		}}, nil
+	case "instance":
+		currentType, _ := current["type"].(string)
+		if currentType == "" {
+			return nil, nil
+		}
+		desiredType := "container"
+		if desired.VM.Bool() {
+			desiredType = "virtual-machine"
+		}
+		if currentType == desiredType {
+			return nil, nil
+		}
+		return []DiffChange{{
+			Path:   "vm",
+			Old:    currentType == "virtual-machine",
+			New:    desired.VM.Bool(),
+			Action: "modify",
+		}}, nil
 	default:
 		return nil, nil
 	}
