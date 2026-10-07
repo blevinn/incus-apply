@@ -26,6 +26,9 @@ type Options struct {
 	Yes     bool
 	Diff    string
 	Replace bool
+	// RejectUnsupportedChanges fails planning when create-only drift cannot be
+	// applied in place and Replace is not enabled.
+	RejectUnsupportedChanges bool
 	// RequireExistingConfig requires existing resources to contain the given
 	// config key/value pairs before they may be updated or deleted. Creation is
 	// unaffected. A nil or empty map preserves the default adoption behavior.
