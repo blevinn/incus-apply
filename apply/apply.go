@@ -39,11 +39,11 @@ type Options struct {
 	Stop                  bool
 	NoLaunch              bool
 	// EnsureRunning starts existing instances that are otherwise converged but stopped.
-	EnsureRunning         bool
-	FailFast              bool
-	NoWaitCloudInit       bool
-	ForceLocal            bool
-	CommandTimeout        time.Duration
+	EnsureRunning   bool
+	FailFast        bool
+	NoWaitCloudInit bool
+	ForceLocal      bool
+	CommandTimeout  time.Duration
 }
 
 type Change struct {

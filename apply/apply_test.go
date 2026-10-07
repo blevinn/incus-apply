@@ -127,7 +127,6 @@ func TestRejectUnsupportedChangesOption(t *testing.T) {
 	}
 }
 
-
 func TestEnsureRunningOption(t *testing.T) {
 	client := NewNative(Options{EnsureRunning: true})
 	if !client.options.EnsureRunning {

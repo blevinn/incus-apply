@@ -601,7 +601,6 @@ func TestComputeUpsertDiffReplaceStillAllowsUnsupportedDrift(t *testing.T) {
 	}
 }
 
-
 func TestComputeUpsertDiffEnsureRunningPlansStoppedConvergedInstanceStart(t *testing.T) {
 	client := newFakeClient()
 	client.exists["instance/herdr"] = true
