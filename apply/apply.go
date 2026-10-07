@@ -28,6 +28,9 @@ type Options struct {
 	Project   string
 	Remote    string
 	Replace   bool
+	// RejectUnsupportedChanges fails instead of ignoring create-only drift when
+	// replacement has not been requested.
+	RejectUnsupportedChanges bool
 	// RequireExistingConfig requires an existing resource to contain all
 	// specified config key/value pairs before update or delete. It does not
 	// affect creation and is empty by default to preserve upstream behavior.
