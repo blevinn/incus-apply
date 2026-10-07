@@ -776,7 +776,6 @@ func stripColors(s string) string {
 	return s
 }
 
-
 func TestDiffResource_UnmanagedNetworkTypeChangeRequiresRecreate(t *testing.T) {
 	current := `
 type: physical

@@ -468,7 +468,6 @@ func createOnlyFields(resourceType string) map[string]bool {
 	}
 }
 
-
 func unsupportedLiveChanges(currentYAML string, desired *config.Resource) ([]DiffChange, error) {
 	current, err := parseYAMLToMap(currentYAML, "current config")
 	if err != nil {
