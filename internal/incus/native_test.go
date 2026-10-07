@@ -111,9 +111,9 @@ func (f *fakeNativeAPI) UpdateInstanceState(name string, state incusapi.Instance
 	return fakeNativeOperation{}, nil
 }
 
-func nativeWithFake(api nativeNetworkAPI) *nativeClient {
+func nativeWithFake(api nativeAPI) *nativeClient {
 	return &nativeClient{
-		connect: func(string) (nativeNetworkAPI, error) {
+		connect: func(string) (nativeAPI, error) {
 			return api, nil
 		},
 	}
@@ -231,7 +231,6 @@ func TestNativeRejectsUnsupportedResourceKind(t *testing.T) {
 	}
 }
 
-
 func TestNativeCreateInstanceFromLocalAlias(t *testing.T) {
 	api := &fakeNativeAPI{}
 	client := nativeWithFake(api)
@@ -249,9 +248,9 @@ func TestNativeCreateInstanceFromLocalAlias(t *testing.T) {
 					"pool": "default",
 				},
 				"management": {
-					"type": "nic",
+					"type":    "nic",
 					"network": "aginctus-mgmt",
-					"name": "eth0",
+					"name":    "eth0",
 				},
 			},
 		},
@@ -379,7 +378,6 @@ func TestNativeExistsInstanceNotFound(t *testing.T) {
 		t.Fatal("Exists() = true, want false")
 	}
 }
-
 
 func TestNativeInstanceWaitsRemainExplicitlyUnsupported(t *testing.T) {
 	client := nativeWithFake(&fakeNativeAPI{})
