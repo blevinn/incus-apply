@@ -86,7 +86,7 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 		}
 		redactPreviewDiff(diff, res, opts.ShowEnv)
 
-		if len(diff) > 0 {
+		if len(diff) > 0 || len(status.UnsupportedChanges) > 0 {
 			item := OutputItem{ResourceID: resourceID, Changes: diff}
 			if opts.Stop && resource.Type(res.Type) == resource.TypeInstance && client.Running(res) {
 				item.Note = "restart"
@@ -104,6 +104,13 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 					plans = append(plans, upsertPlan{res: res, action: upsertReplace})
 					continue
 				}
+				if opts.RejectUnsupportedChanges {
+					err := fmt.Errorf("create-only field changes require replacement: %s", unsupportedChangePaths(status.UnsupportedChanges))
+					if preview.recordError(opts.FailFast, resourceID, "checking unsupported changes", err) != nil {
+						return buildOutput(), preview, plans
+					}
+					continue
+				}
 				printWarning(opts.Quiet, "Warning: %s has create-only field changes (%s); those fields will be ignored (rerun with --replace to recreate).",
 					resourceID, unsupportedChangePaths(status.UnsupportedChanges))
 				diff = filterUnsupportedChanges(diff, status.UnsupportedChanges)
@@ -113,6 +120,10 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 				updates = append(updates, item)
 				preview.updated++
 				plans = append(plans, upsertPlan{res: res, action: upsertUpdate})
+			} else if opts.EnsureRunning && resource.Type(res.Type) == resource.TypeInstance && !client.Running(res) {
+				updates = append(updates, OutputItem{ResourceID: resourceID, Note: "start"})
+				preview.updated++
+				plans = append(plans, upsertPlan{res: res, action: upsertStart})
 			} else {
 				unchanged = append(unchanged, OutputItem{ResourceID: resourceID})
 				preview.unchanged++
