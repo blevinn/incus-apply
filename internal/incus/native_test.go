@@ -231,7 +231,6 @@ func TestNativeRejectsUnsupportedResourceKind(t *testing.T) {
 	}
 }
 
-
 func TestNativeCreateInstanceFromLocalAlias(t *testing.T) {
 	api := &fakeNativeAPI{}
 	client := nativeWithFake(api)
@@ -249,9 +248,9 @@ func TestNativeCreateInstanceFromLocalAlias(t *testing.T) {
 					"pool": "default",
 				},
 				"management": {
-					"type": "nic",
+					"type":    "nic",
 					"network": "aginctus-mgmt",
-					"name": "eth0",
+					"name":    "eth0",
 				},
 			},
 		},
@@ -379,7 +378,6 @@ func TestNativeExistsInstanceNotFound(t *testing.T) {
 		t.Fatal("Exists() = true, want false")
 	}
 }
-
 
 func TestNativeInstanceWaitsRemainExplicitlyUnsupported(t *testing.T) {
 	client := nativeWithFake(&fakeNativeAPI{})

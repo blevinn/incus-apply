@@ -120,7 +120,6 @@ func TestRequireExistingConfigOption(t *testing.T) {
 	}
 }
 
-
 func TestRejectUnsupportedChangesOption(t *testing.T) {
 	client := NewNative(Options{RejectUnsupportedChanges: true})
 	if !client.options.RejectUnsupportedChanges {

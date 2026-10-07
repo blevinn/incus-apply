@@ -555,7 +555,6 @@ func TestComputeDeleteDiff_ExistingResourceGuardRejectsForeignResource(t *testin
 	}
 }
 
-
 func TestComputeUpsertDiffRejectsUnsupportedCreateOnlyDriftWhenRequested(t *testing.T) {
 	client := newFakeClient()
 	client.exists["network/aginctus-mgmt"] = true
@@ -590,7 +589,7 @@ func TestComputeUpsertDiffReplaceStillAllowsUnsupportedDrift(t *testing.T) {
 	client.current["network/aginctus-mgmt"] = "type: physical\nconfig:\n  user.aginctus.managed: \"true\"\n"
 
 	res := &config.Resource{
-		Base: config.Base{Type: "network", Name: "aginctus-mgmt"},
+		Base:          config.Base{Type: "network", Name: "aginctus-mgmt"},
 		NetworkFields: config.NetworkFields{NetworkType: "bridge"},
 	}
 	_, preview, plans := computeUpsertDiff(&Options{Replace: true, RejectUnsupportedChanges: true}, client, []*config.Resource{res})

@@ -316,7 +316,6 @@ func resultFromError(err error) *Result {
 	return &Result{}
 }
 
-
 func nativeInstanceCreateRequest(res *config.Resource) (incusapi.InstancesPost, error) {
 	instanceType := incusapi.InstanceTypeContainer
 	if res.VM.Bool() {
