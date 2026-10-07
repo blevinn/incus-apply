@@ -36,6 +36,7 @@ type Options struct {
 	ShowEnv               bool
 	Stop                  bool
 	Launch                bool
+	EnsureRunning         bool
 	FailFast              bool
 	NoWaitCloudInit       bool
 

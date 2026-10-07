@@ -600,3 +600,68 @@ func TestComputeUpsertDiffReplaceStillAllowsUnsupportedDrift(t *testing.T) {
 		t.Fatalf("plans = %#v, want replace", plans)
 	}
 }
+
+func TestComputeUpsertDiffEnsureRunningPlansStoppedConvergedInstanceStart(t *testing.T) {
+	client := newFakeClient()
+	client.exists["instance/herdr"] = true
+	client.current["instance/herdr"] = "config:\n  user.aginctus.managed: \"true\"\n"
+	client.merged["instance/herdr"] = client.current["instance/herdr"]
+	client.running["instance/herdr"] = false
+
+	res := &config.Resource{
+		Base: config.Base{
+			Type: "instance",
+			Name: "herdr",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+	}
+
+	output, preview, plans := computeUpsertDiff(&Options{EnsureRunning: true}, client, []*config.Resource{res})
+	if preview.updated != 1 {
+		t.Fatalf("updated = %d, want 1", preview.updated)
+	}
+	if len(plans) != 1 || plans[0].action != upsertStart {
+		t.Fatalf("plans = %#v, want start plan", plans)
+	}
+	if got := output.Groups[0].Items[0].Note; got != "start" {
+		t.Fatalf("note = %q, want start", got)
+	}
+}
+
+func TestRunnerEnsureRunningStartsAfterConfigUpdate(t *testing.T) {
+	client := newFakeClient()
+	client.running["instance/herdr"] = false
+	r := &runner{
+		opts:   &Options{EnsureRunning: true, FailFast: true, Quiet: true},
+		client: client,
+	}
+
+	res := &config.Resource{Base: config.Base{Type: "instance", Name: "herdr"}}
+	if err := r.update(res, "instance/herdr"); err != nil {
+		t.Fatalf("update() error = %v", err)
+	}
+	if len(client.updateCalls) != 1 || len(client.startCalls) != 1 {
+		t.Fatalf("update calls = %v start calls = %v", client.updateCalls, client.startCalls)
+	}
+}
+
+func TestRunnerStartOnlyDoesNotUpdateInstance(t *testing.T) {
+	client := newFakeClient()
+	r := &runner{
+		opts:   &Options{EnsureRunning: true, FailFast: true, Quiet: true},
+		client: client,
+	}
+	res := &config.Resource{Base: config.Base{Type: "instance", Name: "herdr"}}
+
+	if err := r.upsert(upsertPlan{res: res, action: upsertStart}); err != nil {
+		t.Fatalf("upsert() error = %v", err)
+	}
+	if len(client.startCalls) != 1 {
+		t.Fatalf("start calls = %v, want one", client.startCalls)
+	}
+	if len(client.updateCalls) != 0 {
+		t.Fatalf("update calls = %v, want none", client.updateCalls)
+	}
+}

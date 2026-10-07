@@ -126,3 +126,10 @@ func TestRejectUnsupportedChangesOption(t *testing.T) {
 		t.Fatal("RejectUnsupportedChanges was not preserved")
 	}
 }
+
+func TestEnsureRunningOption(t *testing.T) {
+	client := NewNative(Options{EnsureRunning: true})
+	if !client.options.EnsureRunning {
+		t.Fatal("EnsureRunning was not preserved")
+	}
+}

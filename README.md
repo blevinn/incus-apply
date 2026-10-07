@@ -117,3 +117,12 @@ fail when an existing resource differs in a create-only field that cannot be
 updated in place. `Replace` still takes precedence when explicitly enabled.
 The option is disabled by default so existing CLI behavior continues to warn and
 ignore unsupported create-only changes.
+
+
+### Ensuring instance runtime state
+
+Embeddable callers can set `Options.EnsureRunning` when an instance should be
+both configuration-converged and running. A stopped instance with no
+configuration drift is planned as a start-only update; an instance that needs a
+configuration update is started after that update if necessary. The option is
+disabled by default and does not change CLI behavior.

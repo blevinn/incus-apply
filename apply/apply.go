@@ -38,10 +38,12 @@ type Options struct {
 	ShowEnv               bool
 	Stop                  bool
 	NoLaunch              bool
-	FailFast              bool
-	NoWaitCloudInit       bool
-	ForceLocal            bool
-	CommandTimeout        time.Duration
+	// EnsureRunning starts existing instances that are otherwise converged but stopped.
+	EnsureRunning   bool
+	FailFast        bool
+	NoWaitCloudInit bool
+	ForceLocal      bool
+	CommandTimeout  time.Duration
 }
 
 type Change struct {
@@ -131,6 +133,7 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 		ShowEnv:                  c.options.ShowEnv,
 		Stop:                     c.options.Stop,
 		Launch:                   !c.options.NoLaunch,
+		EnsureRunning:            c.options.EnsureRunning,
 		FailFast:                 c.options.FailFast,
 		NoWaitCloudInit:          c.options.NoWaitCloudInit,
 		ForceLocal:               c.options.ForceLocal,
