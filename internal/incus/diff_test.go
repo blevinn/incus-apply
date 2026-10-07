@@ -775,3 +775,68 @@ func stripColors(s string) string {
 	s = strings.ReplaceAll(s, colorReset, "")
 	return s
 }
+
+func TestDiffResource_UnmanagedNetworkTypeChangeRequiresRecreate(t *testing.T) {
+	current := `
+type: physical
+config:
+  user.aginctus.managed: "true"
+`
+	desired := &config.Resource{
+		Base: config.Base{
+			Type: "network",
+			Name: "aginctus-mgmt",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+		NetworkFields: config.NetworkFields{NetworkType: "bridge"},
+	}
+
+	changes, status, err := DiffResource(current, desired)
+	if err != nil {
+		t.Fatalf("DiffResource() error = %v", err)
+	}
+	if status.Managed {
+		t.Fatalf("expected unmanaged status, got %#v", status)
+	}
+	if status.Warning != ManagementWarningRecreate {
+		t.Fatalf("warning = %q, want %q", status.Warning, ManagementWarningRecreate)
+	}
+	if len(status.UnsupportedChanges) != 1 {
+		t.Fatalf("unsupported changes = %#v, want one", status.UnsupportedChanges)
+	}
+	change := status.UnsupportedChanges[0]
+	if change.Path != "networkType" || change.Old != "physical" || change.New != "bridge" {
+		t.Fatalf("unsupported change = %#v", change)
+	}
+	if len(changes) != 0 {
+		t.Fatalf("mutable changes = %#v, want none", changes)
+	}
+}
+
+func TestDiffResource_UnmanagedMatchingNetworkTypeDoesNotRequireRecreate(t *testing.T) {
+	current := `
+type: bridge
+config:
+  user.aginctus.managed: "true"
+`
+	desired := &config.Resource{
+		Base: config.Base{
+			Type: "network",
+			Name: "aginctus-mgmt",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+		NetworkFields: config.NetworkFields{NetworkType: "bridge"},
+	}
+
+	_, status, err := DiffResource(current, desired)
+	if err != nil {
+		t.Fatalf("DiffResource() error = %v", err)
+	}
+	if len(status.UnsupportedChanges) != 0 {
+		t.Fatalf("unsupported changes = %#v, want none", status.UnsupportedChanges)
+	}
+}
