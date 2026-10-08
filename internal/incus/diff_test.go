@@ -840,3 +840,60 @@ config:
 		t.Fatalf("unsupported changes = %#v, want none", status.UnsupportedChanges)
 	}
 }
+
+func TestDiffResource_UnmanagedInstanceTypeChangeRequiresRecreate(t *testing.T) {
+	current := `
+type: virtual-machine
+config:
+  user.aginctus.managed: "true"
+`
+	desired := &config.Resource{
+		Base: config.Base{
+			Type: "instance",
+			Name: "agent",
+			Config: map[string]string{
+				"user.aginctus.managed": "true",
+			},
+		},
+	}
+
+	changes, status, err := DiffResource(current, desired)
+	if err != nil {
+		t.Fatalf("DiffResource() error = %v", err)
+	}
+	if status.Managed {
+		t.Fatalf("expected unmanaged status, got %#v", status)
+	}
+	if status.Warning != ManagementWarningRecreate {
+		t.Fatalf("warning = %q, want %q", status.Warning, ManagementWarningRecreate)
+	}
+	if len(status.UnsupportedChanges) != 1 {
+		t.Fatalf("unsupported changes = %#v, want one", status.UnsupportedChanges)
+	}
+	change := status.UnsupportedChanges[0]
+	if change.Path != "vm" || change.Old != true || change.New != false {
+		t.Fatalf("unsupported change = %#v", change)
+	}
+	if len(changes) != 0 {
+		t.Fatalf("mutable changes = %#v, want none", changes)
+	}
+}
+
+func TestDiffResource_UnmanagedMatchingInstanceTypeDoesNotRequireRecreate(t *testing.T) {
+	current := `
+type: container
+config:
+  user.aginctus.managed: "true"
+`
+	desired := &config.Resource{
+		Base: config.Base{Type: "instance", Name: "agent"},
+	}
+
+	_, status, err := DiffResource(current, desired)
+	if err != nil {
+		t.Fatalf("DiffResource() error = %v", err)
+	}
+	if len(status.UnsupportedChanges) != 0 {
+		t.Fatalf("unsupported changes = %#v, want none", status.UnsupportedChanges)
+	}
+}
