@@ -841,7 +841,6 @@ config:
 	}
 }
 
-
 func TestDiffResource_UnmanagedInstanceTypeChangeRequiresRecreate(t *testing.T) {
 	current := `
 type: virtual-machine
