@@ -276,6 +276,12 @@ func TestNativeCreateInstanceFromLocalAlias(t *testing.T) {
 	if got := api.createdInstance.Devices["management"]["network"]; got != "aginctus-mgmt" {
 		t.Fatalf("management network = %q", got)
 	}
+	if api.createdInstance.Profiles == nil {
+		t.Fatal("profiles = nil, want explicit empty profile list")
+	}
+	if len(api.createdInstance.Profiles) != 0 {
+		t.Fatalf("profiles = %#v, want empty", api.createdInstance.Profiles)
+	}
 }
 
 func TestNativeUpdateInstanceUsesETagAndPreservesForeignConfig(t *testing.T) {
