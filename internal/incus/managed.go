@@ -225,8 +225,9 @@ func cloneResource(res *config.Resource) (*config.Resource, error) {
 	clone.Type = res.Type
 	clone.Remote = res.Remote
 	clone.PreviewRedactPrefixes = res.PreviewRedactPrefixes
-	if res.Profiles != nil && clone.Profiles == nil {
-		clone.Profiles = []string{}
+	if res.Profiles != nil {
+		clone.Profiles = make([]string, len(res.Profiles))
+		copy(clone.Profiles, res.Profiles)
 	}
 	return &clone, nil
 }
