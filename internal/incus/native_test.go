@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -394,5 +395,24 @@ func TestNativeInstanceWaitsRemainExplicitlyUnsupported(t *testing.T) {
 	}
 	if result := client.WaitCloudInit(res); result.Error == nil {
 		t.Fatal("WaitCloudInit() error = nil, want unsupported error")
+	}
+}
+
+type contextWaitOperation struct { waited bool }
+func (o *contextWaitOperation) Wait() error { o.waited = true; return nil }
+func (o *contextWaitOperation) WaitContext(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestNativeWaitContextObservesCancellation(t *testing.T) {
+	ctx,cancel:=context.WithCancel(context.Background())
+	c:=&nativeClient{}
+	c.SetContext(ctx)
+	op:=&contextWaitOperation{}
+	cancel()
+	err:=c.waitOperation(op)
+	if !errors.Is(err,context.Canceled) || op.waited {
+		t.Fatalf("wait returned %v, fallback wait=%t",err,op.waited)
 	}
 }
