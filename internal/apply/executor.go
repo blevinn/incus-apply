@@ -182,7 +182,7 @@ func (a *defaultExecutor) Delete() error {
 		return err
 	}
 
-	r := &runner{opts: &a.opts, client: a.client, printer: deletePrinter{}}
+	r := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: deletePrinter{}}
 	for _, p := range plans {
 		if err := r.delete(p); err != nil {
 			return err
@@ -240,7 +240,7 @@ func (a *defaultExecutor) Reset() error {
 		return err
 	}
 
-	dr := &runner{opts: &a.opts, client: a.client, printer: deletePrinter{}}
+	dr := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: deletePrinter{}}
 	for _, p := range delPlans {
 		if err := dr.delete(p); err != nil {
 			return err
@@ -252,8 +252,9 @@ func (a *defaultExecutor) Reset() error {
 	}
 
 	printInfo(a.opts.Quiet, "")
-	cr := &runner{opts: &a.opts, client: a.client, printer: upsertPrinter{}}
+	cr := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: upsertPrinter{}}
 	for _, p := range createPlans {
+		if err := a.ctx.Err(); err != nil {return err}
 		if err := cr.upsert(p); err != nil {
 			return err
 		}
