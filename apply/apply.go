@@ -130,6 +130,7 @@ func (c *Client) run(ctx context.Context, reader io.Reader, planOnly bool) (Prev
 	}
 
 	client := c.backend(c.options)
+	if contextual, ok := client.(interface{ SetContext(context.Context) }); ok {contextual.SetContext(ctx)}
 	if err := client.Ping(); err != nil {
 		return Preview{}, err
 	}
