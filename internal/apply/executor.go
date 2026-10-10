@@ -56,10 +56,15 @@ func NewExecutorWithContext(ctx context.Context, opts Options, client incus.Clie
 	}
 }
 
+func (a *defaultExecutor) contextErr() error {
+	if a.ctx == nil {return nil}
+	return a.ctx.Err()
+}
+
 // loadAndValidate loads resources from config files, applies project override,
 // and validates uniqueness. Returns nil resources (no error) when none are found.
 func (a *defaultExecutor) loadAndValidate() ([]*config.Resource, error) {
-	if err := a.ctx.Err(); err != nil { return nil, err }
+	if err := a.contextErr(); err != nil { return nil, err }
 	resources, err := loadResources(&a.opts)
 	if err != nil {
 		return nil, err
@@ -102,7 +107,7 @@ func (a *defaultExecutor) Upsert() error {
 	}
 	output, preview, plans := computeUpsertDiff(&a.opts, a.client, sorted)
 
-	if err := a.ctx.Err(); err != nil { return err }
+	if err := a.contextErr(); err != nil { return err }
 	if err := a.renderer.Render(output); err != nil {
 		return err
 	}
@@ -127,7 +132,7 @@ func (a *defaultExecutor) Upsert() error {
 
 	r := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: upsertPrinter{}}
 	for _, p := range plans {
-		if err := a.ctx.Err(); err != nil { return err }
+		if err := a.contextErr(); err != nil { return err }
 		if err := r.upsert(p); err != nil {
 			return err
 		}
@@ -254,7 +259,7 @@ func (a *defaultExecutor) Reset() error {
 	printInfo(a.opts.Quiet, "")
 	cr := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: upsertPrinter{}}
 	for _, p := range createPlans {
-		if err := a.ctx.Err(); err != nil {return err}
+		if err := a.contextErr(); err != nil {return err}
 		if err := cr.upsert(p); err != nil {
 			return err
 		}
