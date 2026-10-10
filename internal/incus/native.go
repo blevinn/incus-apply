@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -52,6 +53,7 @@ func (s nativeServer) UpdateInstanceState(name string, req incusapi.InstanceStat
 }
 
 type nativeClient struct {
+	ctx context.Context
 	remote string
 	stop   bool
 
@@ -60,6 +62,7 @@ type nativeClient struct {
 
 func NewNative(remote string, stop bool) Client {
 	c := &nativeClient{
+		ctx: context.Background(),
 		remote: remote,
 		stop:   stop,
 	}
@@ -81,6 +84,19 @@ func NewNative(remote string, stop bool) Client {
 		return nativeServer{InstanceServer: base}, nil
 	}
 	return c
+}
+
+// SetContext configures cancellation for the native backend.
+func (c *nativeClient) SetContext(ctx context.Context) { c.ctx = ctx }
+
+func (c *nativeClient) waitOperation(op nativeOperation) error {
+	if c.ctx != nil {
+		if err := c.ctx.Err(); err != nil {return err}
+		if contextual, ok := op.(interface{WaitContext(context.Context) error}); ok {
+			return contextual.WaitContext(c.ctx)
+		}
+	}
+	return op.Wait()
 }
 
 func (c *nativeClient) project(res *config.Resource) (nativeAPI, error) {
@@ -133,7 +149,7 @@ func (c *nativeClient) Create(res *config.Resource) *Result {
 		if err != nil {
 			return resultFromError(err)
 		}
-		return resultFromError(op.Wait())
+		return resultFromError(c.waitOperation(op))
 	default:
 		return unsupportedNative(res, "create")
 	}
@@ -184,7 +200,7 @@ func (c *nativeClient) Delete(res *config.Resource) *Result {
 		if err != nil {
 			return resultFromError(err)
 		}
-		return resultFromError(op.Wait())
+		return resultFromError(c.waitOperation(op))
 	default:
 		return unsupportedNative(res, "delete")
 	}
@@ -260,7 +276,7 @@ func (c *nativeClient) Start(res *config.Resource) *Result {
 	if err != nil {
 		return resultFromError(err)
 	}
-	return resultFromError(op.Wait())
+	return resultFromError(c.waitOperation(op))
 }
 
 func (c *nativeClient) Stop(res *config.Resource) *Result {
@@ -275,7 +291,7 @@ func (c *nativeClient) Stop(res *config.Resource) *Result {
 	if err != nil {
 		return resultFromError(err)
 	}
-	return resultFromError(op.Wait())
+	return resultFromError(c.waitOperation(op))
 }
 
 func (c *nativeClient) Running(res *config.Resource) bool {
@@ -431,7 +447,7 @@ func (c *nativeClient) updateInstance(server nativeAPI, res *config.Resource) *R
 		}
 		return resultFromError(err)
 	}
-	if err := op.Wait(); err != nil {
+	if err := c.waitOperation(op); err != nil {
 		if c.stop && wasRunning {
 			_ = c.Start(res)
 		}
