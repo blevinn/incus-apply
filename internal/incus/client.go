@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -46,6 +47,7 @@ type Client interface {
 }
 
 type client struct {
+	ctx context.Context
 	globalFlags []string
 	// remote is the Incus remote server to target. Empty means the default remote
 	// configured for the incus client. Used for Ping; per-resource remotes are
@@ -56,9 +58,13 @@ type client struct {
 	timeout time.Duration
 }
 
+// SetContext configures cancellation for a single invocation.
+func (c *client) SetContext(ctx context.Context) { c.ctx = ctx }
+
 // New creates a new Incus client. remote is the target Incus remote (empty = default).
 func New(globalFlags []string, remote string, stop, verbose bool, timeout time.Duration) Client {
 	return &client{
+		ctx: context.Background(),
 		globalFlags: globalFlags,
 		remote:      remote,
 		stop:        stop,
