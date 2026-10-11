@@ -30,7 +30,8 @@ func (c client) runWithProgress(args []string, stdin []byte, progressLabel strin
 // runVerbose streams all command output directly to stdout/stderr.
 // Used for setup commands when --verbose is active.
 func (c client) runVerbose(args []string, stdin []byte) *Result {
-	ctx := context.Background()
+	ctx := c.ctx
+	if ctx == nil {ctx = context.Background()}
 	cancel := func() {}
 	if c.timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
@@ -65,7 +66,7 @@ func (c client) runVerbose(args []string, stdin []byte) *Result {
 			result.Error = fmt.Errorf("command timed out after %s", c.timeout)
 			return result
 		}
-		result.Error = fmt.Errorf("%w: %s", err, strings.TrimSpace(result.Stderr))
+		if ctx.Err() != nil { result.Error = ctx.Err() } else { result.Error = fmt.Errorf("%w: %s", err, strings.TrimSpace(result.Stderr)) }
 	}
 	return result
 }
@@ -105,7 +106,8 @@ func (d *dimWriter) flush() {
 
 // execCmd is the shared implementation for run and runQuiet.
 func (c client) execCmd(args []string, stdin []byte, showProgress bool, progressLabel ...string) *Result {
-	ctx := context.Background()
+	ctx := c.ctx
+	if ctx == nil {ctx = context.Background()}
 	cancel := func() {}
 	if c.timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
@@ -163,7 +165,7 @@ func (c client) execCmd(args []string, stdin []byte, showProgress bool, progress
 			result.Error = fmt.Errorf("command timed out after %s", c.timeout)
 			return result
 		}
-		result.Error = fmt.Errorf("%w: %s", err, strings.TrimSpace(result.Stderr))
+		if ctx.Err() != nil { result.Error = ctx.Err() } else { result.Error = fmt.Errorf("%w: %s", err, strings.TrimSpace(result.Stderr)) }
 	}
 	return result
 }

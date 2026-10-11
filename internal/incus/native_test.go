@@ -1,6 +1,8 @@
 package incus
 
 import (
+	"time"
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -394,5 +396,43 @@ func TestNativeInstanceWaitsRemainExplicitlyUnsupported(t *testing.T) {
 	}
 	if result := client.WaitCloudInit(res); result.Error == nil {
 		t.Fatal("WaitCloudInit() error = nil, want unsupported error")
+	}
+}
+
+type contextWaitOperation struct { waited bool }
+func (o *contextWaitOperation) Wait() error { o.waited = true; return nil }
+func (o *contextWaitOperation) WaitContext(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestNativeWaitContextObservesCancellation(t *testing.T) {
+	ctx,cancel:=context.WithCancel(context.Background())
+	c:=&nativeClient{}
+	c.SetContext(ctx)
+	op:=&contextWaitOperation{}
+	cancel()
+	err:=c.waitOperation(op)
+	if !errors.Is(err,context.Canceled) || op.waited {
+		t.Fatalf("wait returned %v, fallback wait=%t",err,op.waited)
+	}
+}
+
+func TestNativeWaitContextInterruptedInFlight(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := &nativeClient{}
+	client.SetContext(ctx)
+	op := &contextWaitOperation{}
+	result := make(chan error, 1)
+	go func() {result <- client.waitOperation(op)}()
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err,context.Canceled) || op.waited {
+			t.Fatalf("wait err=%v fallback=%t",err,op.waited)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("context-aware operation wait did not return after cancellation")
 	}
 }

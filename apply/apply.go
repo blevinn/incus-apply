@@ -7,6 +7,7 @@
 package apply
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -100,15 +101,27 @@ func newClient(options Options, backend backendFactory) *Client {
 }
 
 func (c *Client) Plan(reader io.Reader) (Preview, error) {
-	return c.run(reader, true)
+	return c.PlanContext(context.Background(), reader)
 }
 
 func (c *Client) Execute(reader io.Reader) (Result, error) {
-	preview, err := c.run(reader, false)
+	return c.ExecuteContext(context.Background(), reader)
+}
+
+// PlanContext plans with caller cancellation, including between resources.
+func (c *Client) PlanContext(ctx context.Context, reader io.Reader) (Preview, error) {
+	return c.run(ctx, reader, true)
+}
+
+// ExecuteContext executes with caller cancellation at resource boundaries.
+func (c *Client) ExecuteContext(ctx context.Context, reader io.Reader) (Result, error) {
+	preview, err := c.run(ctx, reader, false)
 	return Result{Preview: preview}, err
 }
 
-func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
+func (c *Client) run(ctx context.Context, reader io.Reader, planOnly bool) (Preview, error) {
+	if ctx == nil { return Preview{}, fmt.Errorf("context must not be nil") }
+	if err := ctx.Err(); err != nil { return Preview{}, fmt.Errorf("incus-apply canceled before planning: %w", err) }
 	if reader == nil {
 		return Preview{}, fmt.Errorf("configuration reader must not be nil")
 	}
@@ -117,10 +130,12 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 	}
 
 	client := c.backend(c.options)
+	if contextual, ok := client.(interface{ SetContext(context.Context) }); ok {contextual.SetContext(ctx)}
 	if err := client.Ping(); err != nil {
 		return Preview{}, err
 	}
 
+	if err := ctx.Err(); err != nil { return Preview{}, fmt.Errorf("incus-apply canceled after daemon ping: %w", err) }
 	renderer := &captureRenderer{}
 	opts := internalapply.Options{
 		Reader:                   reader,
@@ -144,7 +159,7 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 		opts.Diff = "json"
 	}
 
-	executor := internalapply.NewExecutor(opts, client, renderer)
+	executor := internalapply.NewExecutorWithContext(ctx, opts, client, renderer)
 	var err error
 	switch c.options.Operation {
 	case Upsert:
@@ -154,6 +169,7 @@ func (c *Client) run(reader io.Reader, planOnly bool) (Preview, error) {
 	case Reset:
 		err = executor.Reset()
 	}
+	if contextErr := ctx.Err(); contextErr != nil { return copyPreview(renderer.output), fmt.Errorf("incus-apply operation canceled: %w", contextErr) }
 	return copyPreview(renderer.output), err
 }
 

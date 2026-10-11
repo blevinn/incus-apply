@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -31,6 +32,7 @@ type Renderer interface {
 }
 
 type defaultExecutor struct {
+	ctx context.Context
 	opts     Options
 	client   incus.Client
 	renderer Renderer
@@ -40,7 +42,13 @@ type defaultExecutor struct {
 
 // NewExecutor creates a new Executor.
 func NewExecutor(opts Options, client incus.Client, renderer Renderer) Executor {
+	return NewExecutorWithContext(context.Background(), opts, client, renderer)
+}
+
+// NewExecutorWithContext preserves the caller context across planning and resource actions.
+func NewExecutorWithContext(ctx context.Context, opts Options, client incus.Client, renderer Renderer) Executor {
 	return &defaultExecutor{
+		ctx: ctx,
 		opts:        opts,
 		client:      client,
 		renderer:    renderer,
@@ -48,9 +56,15 @@ func NewExecutor(opts Options, client incus.Client, renderer Renderer) Executor 
 	}
 }
 
+func (a *defaultExecutor) contextErr() error {
+	if a.ctx == nil {return nil}
+	return a.ctx.Err()
+}
+
 // loadAndValidate loads resources from config files, applies project override,
 // and validates uniqueness. Returns nil resources (no error) when none are found.
 func (a *defaultExecutor) loadAndValidate() ([]*config.Resource, error) {
+	if err := a.contextErr(); err != nil { return nil, err }
 	resources, err := loadResources(&a.opts)
 	if err != nil {
 		return nil, err
@@ -93,6 +107,7 @@ func (a *defaultExecutor) Upsert() error {
 	}
 	output, preview, plans := computeUpsertDiff(&a.opts, a.client, sorted)
 
+	if err := a.contextErr(); err != nil { return err }
 	if err := a.renderer.Render(output); err != nil {
 		return err
 	}
@@ -115,8 +130,9 @@ func (a *defaultExecutor) Upsert() error {
 		return err
 	}
 
-	r := &runner{opts: &a.opts, client: a.client, printer: upsertPrinter{}}
+	r := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: upsertPrinter{}}
 	for _, p := range plans {
+		if err := a.contextErr(); err != nil { return err }
 		if err := r.upsert(p); err != nil {
 			return err
 		}
@@ -171,7 +187,7 @@ func (a *defaultExecutor) Delete() error {
 		return err
 	}
 
-	r := &runner{opts: &a.opts, client: a.client, printer: deletePrinter{}}
+	r := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: deletePrinter{}}
 	for _, p := range plans {
 		if err := r.delete(p); err != nil {
 			return err
@@ -229,7 +245,7 @@ func (a *defaultExecutor) Reset() error {
 		return err
 	}
 
-	dr := &runner{opts: &a.opts, client: a.client, printer: deletePrinter{}}
+	dr := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: deletePrinter{}}
 	for _, p := range delPlans {
 		if err := dr.delete(p); err != nil {
 			return err
@@ -241,8 +257,9 @@ func (a *defaultExecutor) Reset() error {
 	}
 
 	printInfo(a.opts.Quiet, "")
-	cr := &runner{opts: &a.opts, client: a.client, printer: upsertPrinter{}}
+	cr := &runner{ctx: a.ctx, opts: &a.opts, client: a.client, printer: upsertPrinter{}}
 	for _, p := range createPlans {
+		if err := a.contextErr(); err != nil {return err}
 		if err := cr.upsert(p); err != nil {
 			return err
 		}

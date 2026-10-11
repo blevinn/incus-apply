@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"context"
 	"github.com/abiosoft/incus-apply/internal/config"
 	"github.com/abiosoft/incus-apply/internal/incus"
 	"github.com/abiosoft/incus-apply/internal/resource"
@@ -33,10 +34,16 @@ type deletePlan struct {
 
 // runner executes planned operations against the Incus client.
 type runner struct {
+	ctx context.Context
 	opts    *Options
 	client  incus.Client
 	result  result
 	printer printer
+}
+
+func (r *runner) contextErr() error {
+	if r.ctx == nil { return nil } // Older direct runner callers use Background semantics.
+	return r.ctx.Err()
 }
 
 func (r *runner) printSummary() {
@@ -46,6 +53,7 @@ func (r *runner) printSummary() {
 // upsert handles create-or-update logic for a single resource.
 // Returns an error only if FailFast is enabled and an error occurs.
 func (r *runner) upsert(plan upsertPlan) error {
+	if err := r.contextErr(); err != nil { return err }
 	switch plan.action {
 	case upsertCreate:
 		return r.create(plan.res, formatResourceID(plan.res))
@@ -62,10 +70,12 @@ func (r *runner) upsert(plan upsertPlan) error {
 }
 
 func (r *runner) replace(res *config.Resource, resourceID string) error {
+	if err := r.contextErr(); err != nil { return err }
 	deleteResult := r.client.Delete(res)
 	if deleteResult.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "replace delete failed", deleteResult.Error)
 	}
+	if err := r.contextErr(); err != nil { return err }
 	createResult := r.client.Create(res)
 	if createResult.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "replace create failed", createResult.Error)
@@ -77,11 +87,14 @@ func (r *runner) replace(res *config.Resource, resourceID string) error {
 
 // update applies an update for a resource that was already confirmed to have changes.
 func (r *runner) update(res *config.Resource, resourceID string) error {
+	if err := r.contextErr(); err != nil { return err }
 	result := r.client.Update(res)
 	if result.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "update failed", result.Error)
 	}
+	if err := r.contextErr(); err != nil { return err }
 	if r.opts.EnsureRunning && resource.Type(res.Type) == resource.TypeInstance && !r.client.Running(res) {
+		if err := r.contextErr(); err != nil { return err }
 		if startResult := r.client.Start(res); startResult.Error != nil {
 			return r.result.recordError(r.opts.FailFast, resourceID, "start after update failed", startResult.Error)
 		}
@@ -92,6 +105,7 @@ func (r *runner) update(res *config.Resource, resourceID string) error {
 }
 
 func (r *runner) start(res *config.Resource, resourceID string) error {
+	if err := r.contextErr(); err != nil { return err }
 	result := r.client.Start(res)
 	if result.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "start failed", result.Error)
@@ -103,6 +117,7 @@ func (r *runner) start(res *config.Resource, resourceID string) error {
 
 // create handles creating a new resource.
 func (r *runner) create(res *config.Resource, resourceID string) error {
+	if err := r.contextErr(); err != nil { return err }
 	result := r.client.Create(res)
 	if result.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "create failed", result.Error)
@@ -113,6 +128,7 @@ func (r *runner) create(res *config.Resource, resourceID string) error {
 }
 
 func (r *runner) finishCreatedInstance(res *config.Resource, resourceID string, action upsertAction) error {
+	if err := r.contextErr(); err != nil { return err }
 	if resource.Type(res.Type) != resource.TypeInstance {
 		return nil
 	}
@@ -121,6 +137,7 @@ func (r *runner) finishCreatedInstance(res *config.Resource, resourceID string, 
 		return nil
 	}
 
+	if err := r.contextErr(); err != nil { return err }
 	startResult := r.client.Start(res)
 	if startResult.Error != nil {
 		return r.result.recordError(r.opts.FailFast, resourceID, "start failed", startResult.Error)
@@ -136,14 +153,16 @@ func (r *runner) finishCreatedInstance(res *config.Resource, resourceID string, 
 				return r.result.recordError(r.opts.FailFast, resourceID, "waiting for VM agent failed", waitResult.Error)
 			}
 		}
-		ciResult := r.client.WaitCloudInit(res)
+		if err := r.contextErr(); err != nil { return err }
+	ciResult := r.client.WaitCloudInit(res)
 		if ciResult.Error != nil {
 			return r.result.recordError(r.opts.FailFast, resourceID, "cloud-init failed", ciResult.Error)
 		}
 	}
 
 	if !r.opts.Launch {
-		stopResult := r.client.Stop(res)
+		if err := r.contextErr(); err != nil { return err }
+	stopResult := r.client.Stop(res)
 		if stopResult.Error != nil {
 			return r.result.recordError(r.opts.FailFast, resourceID, "stop after cloud-init failed", stopResult.Error)
 		}
@@ -163,6 +182,7 @@ func hasCloudInit(res *config.Resource) bool {
 
 // delete handles deletion of a single resource based on the pre-computed plan.
 func (r *runner) delete(p deletePlan) error {
+	if err := r.contextErr(); err != nil { return err }
 	resourceID := formatResourceID(p.res)
 
 	if p.skip {

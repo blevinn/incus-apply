@@ -1,6 +1,8 @@
 package apply
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -132,4 +134,41 @@ func TestEnsureRunningOption(t *testing.T) {
 	if !client.options.EnsureRunning {
 		t.Fatal("EnsureRunning was not preserved")
 	}
+}
+
+func TestContextAPIsRejectPreCanceledOperation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	backend := &fakeBackend{}
+	client := New(Options{})
+	client.backend = func(Options) internalincus.Client { return backend }
+	doc := "kind: network\nname: canceled\nnetworkType: bridge\n"
+	if _, err := client.PlanContext(ctx, strings.NewReader(doc)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PlanContext error = %v, want canceled", err)
+	}
+	if _, err := client.ExecuteContext(ctx, strings.NewReader(doc)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteContext error = %v, want canceled", err)
+	}
+	if backend.created != 0 {t.Fatalf("created %d resources after cancel", backend.created)}
+}
+
+type cancelAfterFirstBackend struct {
+	fakeBackend
+	cancel context.CancelFunc
+}
+func (f *cancelAfterFirstBackend) Create(res *internalconfig.Resource) *internalincus.Result {
+	f.fakeBackend.Create(res)
+	f.cancel()
+	return &internalincus.Result{}
+}
+func TestExecuteContextPreventsLaterMutations(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	backend := &cancelAfterFirstBackend{cancel: cancel}
+	client := New(Options{})
+	client.backend = func(Options) internalincus.Client {return backend}
+	doc := "kind: network\nname: a\nnetworkType: bridge\n---\nkind: network\nname: b\nnetworkType: bridge\n"
+	_, err := client.ExecuteContext(ctx, strings.NewReader(doc))
+	if !errors.Is(err, context.Canceled) {t.Fatalf("ExecuteContext error = %v, want canceled",err)}
+	if backend.created != 1 {t.Fatalf("created %d resources, want one",backend.created)}
 }
