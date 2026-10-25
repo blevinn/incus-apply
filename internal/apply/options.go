@@ -26,6 +26,9 @@ type Options struct {
 	Yes     bool
 	Diff    string
 	Replace bool
+	// RequireExisting rejects missing resources rather than planning
+	// creation during upsert. A second guard blocks creation at execution.
+	RequireExisting bool
 	// RejectUnsupportedChanges fails planning when create-only drift cannot be
 	// applied in place and Replace is not enabled.
 	RejectUnsupportedChanges bool
