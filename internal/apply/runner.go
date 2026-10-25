@@ -2,6 +2,7 @@ package apply
 
 import (
 	"context"
+	"fmt"
 	"github.com/abiosoft/incus-apply/internal/config"
 	"github.com/abiosoft/incus-apply/internal/incus"
 	"github.com/abiosoft/incus-apply/internal/resource"
@@ -54,6 +55,12 @@ func (r *runner) printSummary() {
 // Returns an error only if FailFast is enabled and an error occurs.
 func (r *runner) upsert(plan upsertPlan) error {
 	if err := r.contextErr(); err != nil { return err }
+	// Defense in depth: even if the preflight result was stale, or a
+	// caller constructs a forbidden plan directly, never dispatch create
+	// or replace under an existing-only upsert.
+	if r.opts.RequireExisting && (plan.action == upsertCreate || plan.action == upsertReplace) {
+		return fmt.Errorf("require-existing forbids create or replacement")
+	}
 	switch plan.action {
 	case upsertCreate:
 		return r.create(plan.res, formatResourceID(plan.res))
