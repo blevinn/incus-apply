@@ -93,6 +93,21 @@ specified config key/value before update or delete; creation is unaffected. The
 option is empty by default so existing CLI and library adoption behavior remains
 backward compatible.
 
+For **update-only reconciliation**, callers can additionally set
+`Options.RequireExisting: true`. Missing resources then produce an error
+during `PlanContext` or `ExecuteContext`, rather than becoming create
+actions. The executor also refuses create/replace actions at the final
+upsert dispatch; `RequireExisting` cannot be combined with delete, reset or
+replace operations. The default is `false`, preserving normal upsert
+creation and CLI behavior.
+
+This option guarantees that the library does not dispatch a create or
+replacement **in that mode**. It does not make read/modify/write atomic:
+another client can replace an existing resource after the initial
+inspection. Use `RequireExistingConfig` for additional ownership checks,
+and implement any stronger mutation-time authorization in the calling
+controller and/or Incus server.
+
 ## Documentation
 
 Check the [project website](https://incus-apply.abiosoft.com).
