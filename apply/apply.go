@@ -29,6 +29,11 @@ type Options struct {
 	Project   string
 	Remote    string
 	Replace   bool
+	// RequireExisting permits only updates to resources already present at
+	// planning time. It rejects planned creation, including an upsert whose
+	// resource is absent. It does NOT fence concurrent writers or recheck
+	// resource ownership at mutation time.
+	RequireExisting bool
 	// RejectUnsupportedChanges fails instead of ignoring create-only drift when
 	// replacement has not been requested.
 	RejectUnsupportedChanges bool
@@ -128,6 +133,9 @@ func (c *Client) run(ctx context.Context, reader io.Reader, planOnly bool) (Prev
 	if err := validateOperation(c.options.Operation); err != nil {
 		return Preview{}, err
 	}
+	if c.options.RequireExisting && (c.options.Operation != Upsert || c.options.Replace) {
+		return Preview{}, fmt.Errorf("require-existing is supported only for upsert without replacement")
+	}
 
 	client := c.backend(c.options)
 	if contextual, ok := client.(interface{ SetContext(context.Context) }); ok {contextual.SetContext(ctx)}
@@ -143,6 +151,7 @@ func (c *Client) run(ctx context.Context, reader io.Reader, planOnly bool) (Prev
 		Project:                  c.options.Project,
 		Remote:                   c.options.Remote,
 		Replace:                  c.options.Replace,
+		RequireExisting:          c.options.RequireExisting,
 		RejectUnsupportedChanges: c.options.RejectUnsupportedChanges,
 		RequireExistingConfig:    c.options.RequireExistingConfig,
 		ShowEnv:                  c.options.ShowEnv,
