@@ -50,6 +50,12 @@ func computeUpsertDiff(opts *Options, client incus.Client, resources []*config.R
 		}
 
 		if !exists {
+			if opts.RequireExisting {
+				if preview.recordError(opts.FailFast, resourceID, "checking required existing resource", fmt.Errorf("resource does not exist")) != nil {
+					return buildOutput(), preview, plans
+				}
+				continue
+			}
 			item := OutputItem{ResourceID: resourceID}
 			if resource.Type(res.Type) == resource.TypeInstance && opts.Launch {
 				item.Note = "launch"
