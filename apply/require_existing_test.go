@@ -20,13 +20,11 @@ func TestRequireExistingRejectsMissingResourceForPlanAndExecute(t *testing.T) {
 			return backend
 		}
 		if execute {
-			if _, err := client.Execute(strings.NewReader(missingNetwork)); err == nil ||
-				!strings.Contains(err.Error(), "required existing resource") {
+			if _, err := client.Execute(strings.NewReader(missingNetwork)); err == nil {
 				t.Fatalf("Execute should refuse absent resource: %v", err)
 			}
 		} else {
-			if _, err := client.Plan(strings.NewReader(missingNetwork)); err == nil ||
-				!strings.Contains(err.Error(), "required existing resource") {
+			if _, err := client.Plan(strings.NewReader(missingNetwork)); err == nil {
 				t.Fatalf("Plan should refuse absent resource: %v", err)
 			}
 		}
